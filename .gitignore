@@ -17,4 +17,7 @@ out/
 dist/
 coverage/
 *.log
+*.zip
+tsconfig.tsbuildinfo
+check_zip.py
 
