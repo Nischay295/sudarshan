@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sudarshan-postgres
+    environment:
+      POSTGRES_DB: sudarshan
+      POSTGRES_USER: sudarshan
+      POSTGRES_PASSWORD: sudarshan
+    ports:
+      - "5432:5432"
+    volumes:
+      - sudarshan-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sudarshan -d sudarshan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  sudarshan-postgres-data:
+
