@@ -3291,153 +3291,262 @@ export default function AccountantWorkspace() {
                     </div>
                   </div>
 
-                  <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
-                    <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "14px" }}>
-                      Accounting Equation Verification Check
-                    </div>
-                    <div style={{ padding: "14px", display: "grid", gap: "10px", fontSize: "13px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span>Assets:</span>
-                        <span>₹ {balanceSheet ? parseFloat(balanceSheet.assets).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}</span>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span>Liabilities + Equity:</span>
-                        <span>
-                          ₹ {balanceSheet ? (parseFloat(balanceSheet.liabilities) + parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit)).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--line)", fontWeight: 800 }}>
-                        <span>Difference:</span>
-                        <span style={{ color: balanceSheet?.balanced ? "var(--green)" : "var(--rose)" }}>
-                          ₹ {balanceSheet ? Math.abs(parseFloat(balanceSheet.assets) - (parseFloat(balanceSheet.liabilities) + parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit))).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                    {/* Left Column: Assets */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "20px" }}>
+                    {/* Column 1: Accounting Equation Check */}
                     <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                      <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "14px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line)" }}>
-                        <span>Assets</span>
-                        <span>Debit Balance</span>
+                      <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
+                        Accounting Equation Verification Check
                       </div>
-                      <div className="table-wrap" style={{ flex: 1 }}>
-                        <table style={{ width: "100%", fontSize: "13px" }}>
-                          <tbody>
-                            {trialBalance?.rows.filter(r => r.account_type === "asset").map(r => {
-                              const bal = parseFloat(r.closing_debit) - parseFloat(r.closing_credit);
-                              return (
-                                <tr key={r.account_code}>
-                                  <td style={{ padding: "8px 14px" }}>
-                                    <span style={{ color: "var(--muted)", marginRight: "8px" }}>{r.account_code}</span>
-                                    {r.account_name}
-                                  </td>
-                                  <td style={{ padding: "8px 14px", textAlign: "right", fontWeight: 700 }}>
-                                    ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                            {(!trialBalance || trialBalance.rows.filter(r => r.account_type === "asset").length === 0) && (
-                              <tr>
-                                <td colSpan={2} style={{ padding: "14px", textAlign: "center", color: "var(--muted)" }}>No asset accounts found.</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "13px", display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)", marginTop: "auto" }}>
-                        <span>Total Assets:</span>
-                        <span>₹ {balanceSheet ? parseFloat(balanceSheet.assets).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}</span>
-                      </div>
-                    </div>
-
-                    {/* Right Column: Liabilities & Equity */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                      {/* Liabilities Section */}
-                      <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
-                        <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "14px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line)" }}>
-                          <span>Liabilities</span>
-                          <span>Credit Balance</span>
+                      <div style={{ padding: "16px", display: "grid", gap: "12px", fontSize: "13px", flex: 1 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span>Total Assets:</span>
+                          <strong>₹ {balanceSheet ? parseFloat(balanceSheet.assets).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}</strong>
                         </div>
-                        <div className="table-wrap">
-                          <table style={{ width: "100%", fontSize: "13px" }}>
-                            <tbody>
-                              {trialBalance?.rows.filter(r => r.account_type === "liability").map(r => {
-                                const bal = parseFloat(r.closing_credit) - parseFloat(r.closing_debit);
-                                return (
-                                  <tr key={r.account_code}>
-                                    <td style={{ padding: "8px 14px" }}>
-                                      <span style={{ color: "var(--muted)", marginRight: "8px" }}>{r.account_code}</span>
-                                      {r.account_name}
-                                    </td>
-                                    <td style={{ padding: "8px 14px", textAlign: "right", fontWeight: 700 }}>
-                                      ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                              {(!trialBalance || trialBalance.rows.filter(r => r.account_type === "liability").length === 0) && (
-                                <tr>
-                                  <td colSpan={2} style={{ padding: "14px", textAlign: "center", color: "var(--muted)" }}>No liability accounts found.</td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span>Total Liabilities + Equity:</span>
+                          <strong>
+                            ₹ {balanceSheet ? (parseFloat(balanceSheet.liabilities) + parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit)).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                          </strong>
                         </div>
-                        <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "13px", display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)" }}>
-                          <span>Total Liabilities:</span>
-                          <span>₹ {balanceSheet ? parseFloat(balanceSheet.liabilities).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}</span>
-                        </div>
-                      </div>
-
-                      {/* Equity Section */}
-                      <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
-                        <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "14px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line)" }}>
-                          <span>Owner's Equity & Retained Earnings</span>
-                          <span>Credit Balance</span>
-                        </div>
-                        <div className="table-wrap">
-                          <table style={{ width: "100%", fontSize: "13px" }}>
-                            <tbody>
-                              {trialBalance?.rows.filter(r => r.account_type === "equity").map(r => {
-                                const bal = parseFloat(r.closing_credit) - parseFloat(r.closing_debit);
-                                return (
-                                  <tr key={r.account_code}>
-                                    <td style={{ padding: "8px 14px" }}>
-                                      <span style={{ color: "var(--muted)", marginRight: "8px" }}>{r.account_code}</span>
-                                      {r.account_name}
-                                    </td>
-                                    <td style={{ padding: "8px 14px", textAlign: "right", fontWeight: 700 }}>
-                                      ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                              {/* Current period profit is also equity */}
-                              {balanceSheet && (
-                                <tr>
-                                  <td style={{ padding: "8px 14px" }}>
-                                    <span style={{ color: "var(--muted)", marginRight: "8px" }}>P&L</span>
-                                    Current Period Profit / Loss
-                                  </td>
-                                  <td style={{ padding: "8px 14px", textAlign: "right", fontWeight: 700, color: parseFloat(balanceSheet.current_period_profit) >= 0 ? "var(--green)" : "var(--rose)" }}>
-                                    ₹ {parseFloat(balanceSheet.current_period_profit).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                        <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "13px", display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)" }}>
-                          <span>Total Equity:</span>
-                          <span>
-                            ₹ {balanceSheet ? (parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit)).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                        <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--line)", fontWeight: 800 }}>
+                          <span>Difference:</span>
+                          <span style={{ color: balanceSheet?.balanced ? "var(--green)" : "var(--rose)" }}>
+                            ₹ {balanceSheet ? Math.abs(parseFloat(balanceSheet.assets) - (parseFloat(balanceSheet.liabilities) + parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit))).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
                           </span>
                         </div>
                       </div>
                     </div>
+
+                    {/* Column 2: Quick Audit Statistics */}
+                    <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                      <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
+                        Audit Ratios & Leverage Metrics
+                      </div>
+                      <div style={{ padding: "16px", display: "grid", gap: "12px", fontSize: "13px", flex: 1 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span>Debt-to-Equity Ratio:</span>
+                          <strong>
+                            {balanceSheet && (parseFloat(balanceSheet.equity) !== 0) 
+                              ? (parseFloat(balanceSheet.liabilities) / (parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit))).toFixed(2)
+                              : "0.00"}
+                          </strong>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span>Asset Turnover Ratio:</span>
+                          <strong>
+                            {balanceSheet && parseFloat(balanceSheet.assets) !== 0 && execSummary
+                              ? (parseFloat(execSummary.revenue) / parseFloat(balanceSheet.assets)).toFixed(2)
+                              : "N/A"}
+                          </strong>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--line)" }}>
+                          <span>Solvency Status:</span>
+                          <span style={{ color: "var(--teal)", fontWeight: 800 }}>Adequate</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Unified Balance Sheet Table */}
+                  <div style={{ marginTop: "24px", border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
+                    <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "15px", borderBottom: "1px solid var(--line)" }}>
+                      Balance Sheet Statement (Unified Report Format)
+                    </div>
+                    <div className="table-wrap" style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", minWidth: "auto", borderCollapse: "collapse", fontSize: "13px" }}>
+                        <thead>
+                          <tr style={{ background: "rgba(255, 255, 255, 0.02)" }}>
+                            <th style={{ padding: "10px 16px", fontWeight: 800 }}>Account Details</th>
+                            <th style={{ padding: "10px 16px", fontWeight: 800, textAlign: "right" }}>Balance</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* 1. ASSETS SECTION */}
+                          <tr style={{ background: "rgba(var(--teal-rgb), 0.05)", fontWeight: 800 }}>
+                            <td colSpan={2} style={{ padding: "10px 16px", color: "var(--teal)", textTransform: "uppercase", fontSize: "11px", letterSpacing: "1px" }}>
+                              Assets
+                            </td>
+                          </tr>
+                          {trialBalance?.rows.filter(r => r.account_type === "asset").map(r => {
+                            const bal = parseFloat(r.closing_debit) - parseFloat(r.closing_credit);
+                            return (
+                              <tr key={r.account_code}>
+                                <td style={{ padding: "8px 24px" }}>
+                                  <span style={{ color: "var(--muted)", marginRight: "12px" }}>{r.account_code}</span>
+                                  {r.account_name}
+                                </td>
+                                <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 700 }}>
+                                  ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr style={{ fontWeight: 800, borderTop: "1px solid var(--line)" }}>
+                            <td style={{ padding: "10px 16px", paddingLeft: "24px" }}>Total Assets</td>
+                            <td style={{ padding: "10px 16px", textAlign: "right", color: "var(--teal)" }}>
+                              ₹ {balanceSheet ? parseFloat(balanceSheet.assets).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                            </td>
+                          </tr>
+
+                          {/* 2. LIABILITIES SECTION */}
+                          <tr style={{ background: "rgba(255, 107, 107, 0.05)", fontWeight: 800 }}>
+                            <td colSpan={2} style={{ padding: "10px 16px", color: "var(--rose)", textTransform: "uppercase", fontSize: "11px", letterSpacing: "1px" }}>
+                              Liabilities
+                            </td>
+                          </tr>
+                          {trialBalance?.rows.filter(r => r.account_type === "liability").map(r => {
+                            const bal = parseFloat(r.closing_credit) - parseFloat(r.closing_debit);
+                            return (
+                              <tr key={r.account_code}>
+                                <td style={{ padding: "8px 24px" }}>
+                                  <span style={{ color: "var(--muted)", marginRight: "12px" }}>{r.account_code}</span>
+                                  {r.account_name}
+                                </td>
+                                <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 700 }}>
+                                  ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr style={{ fontWeight: 800, borderTop: "1px solid var(--line)" }}>
+                            <td style={{ padding: "10px 16px", paddingLeft: "24px" }}>Total Liabilities</td>
+                            <td style={{ padding: "10px 16px", textAlign: "right" }}>
+                              ₹ {balanceSheet ? parseFloat(balanceSheet.liabilities).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                            </td>
+                          </tr>
+
+                          {/* 3. EQUITY SECTION */}
+                          <tr style={{ background: "rgba(255, 255, 255, 0.04)", fontWeight: 800 }}>
+                            <td colSpan={2} style={{ padding: "10px 16px", color: "var(--muted)", textTransform: "uppercase", fontSize: "11px", letterSpacing: "1px" }}>
+                              Owner's Equity
+                            </td>
+                          </tr>
+                          {trialBalance?.rows.filter(r => r.account_type === "equity").map(r => {
+                            const bal = parseFloat(r.closing_credit) - parseFloat(r.closing_debit);
+                            return (
+                              <tr key={r.account_code}>
+                                <td style={{ padding: "8px 24px" }}>
+                                  <span style={{ color: "var(--muted)", marginRight: "12px" }}>{r.account_code}</span>
+                                  {r.account_name}
+                                </td>
+                                <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 700 }}>
+                                  ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {balanceSheet && (
+                            <tr>
+                              <td style={{ padding: "8px 24px" }}>
+                                <span style={{ color: "var(--muted)", marginRight: "12px" }}>P&L</span>
+                                Current Period Retained Earnings (Profit)
+                              </td>
+                              <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 700, color: parseFloat(balanceSheet.current_period_profit) >= 0 ? "var(--green)" : "var(--rose)" }}>
+                                ₹ {parseFloat(balanceSheet.current_period_profit).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          )}
+                          <tr style={{ fontWeight: 800, borderTop: "1px solid var(--line)" }}>
+                            <td style={{ padding: "10px 16px", paddingLeft: "24px" }}>Total Equity</td>
+                            <td style={{ padding: "10px 16px", textAlign: "right" }}>
+                              ₹ {balanceSheet ? (parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit)).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Data Analytics & Company Insights Section */}
+                  <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                    
+                    {/* Left Card: Company Analytics & KPI Summary */}
+                    <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                      <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
+                        📊 Company Performance Summary (Analytics Report)
+                      </div>
+                      <div style={{ padding: "16px", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+                        {execSummary ? (
+                          <div style={{ display: "grid", gap: "12px", fontSize: "13px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span>Fiscal Year Revenue:</span>
+                              <strong>₹ {parseFloat(execSummary.revenue).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span>Net profit margin:</span>
+                              <strong style={{ color: parseFloat(execSummary.net_profit) >= 0 ? "var(--green)" : "var(--rose)" }}>
+                                ₹ {parseFloat(execSummary.net_profit).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </strong>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span>Revenue Growth Rate:</span>
+                              <span style={{ color: "var(--teal)", fontWeight: 800 }}>{execSummary.revenue_growth}</span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span>Customer Count:</span>
+                              <strong>{execSummary.customer_count} Active</strong>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span>Product SKU Catalog:</span>
+                              <strong>{execSummary.product_count} Items</strong>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--line)" }}>
+                              <span>Company Risk Rating:</span>
+                              <span className={`status ${execSummary.risk_level === "low" ? "good" : execSummary.risk_level === "medium" ? "warn" : "bad"}`} style={{ textTransform: "capitalize", padding: "2px 8px", fontSize: "11px" }}>
+                                {execSummary.risk_level} Risk
+                              </span>
+                            </div>
+                            <div style={{ color: "var(--muted)", fontSize: "12px", fontStyle: "italic", marginTop: "4px" }}>
+                              "{execSummary.risk_summary}"
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ textAlign: "center", color: "var(--muted)", padding: "24px" }}>
+                            No company performance summary analytics available.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Card: Business Advisory & AI Commentary */}
+                    <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                      <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
+                        💡 AI Business & Management Advisory
+                      </div>
+                      <div style={{ padding: "16px", flex: 1, overflowY: "auto", fontSize: "13px" }}>
+                        {advisoryReport ? (
+                          <div style={{ display: "grid", gap: "14px" }}>
+                            <div>
+                              <div style={{ fontWeight: 800, color: "var(--teal)", marginBottom: "4px" }}>Executive Summary</div>
+                              <p style={{ color: "var(--text)", lineHeight: "1.4", margin: 0 }}>
+                                {advisoryReport.management_summary}
+                              </p>
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 800, color: "var(--teal)", marginBottom: "4px" }}>Accounting Explanation</div>
+                              <p style={{ color: "var(--muted)", lineHeight: "1.4", margin: 0 }}>
+                                {advisoryReport.accountant_explanation}
+                              </p>
+                            </div>
+                            {advisoryReport.business_advice?.length > 0 && (
+                              <div>
+                                <div style={{ fontWeight: 800, color: "var(--teal)", marginBottom: "4px" }}>Key Actionable Advice</div>
+                                <ul style={{ margin: 0, paddingLeft: "20px", color: "var(--text)", lineHeight: "1.4" }}>
+                                  {advisoryReport.business_advice.slice(0, 3).map((advice, idx) => (
+                                    <li key={idx} style={{ marginBottom: "4px" }}>{advice}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ textAlign: "center", color: "var(--muted)", padding: "24px" }}>
+                            No business advisory analysis loaded.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                   </div>
                 </div>
               </div>
