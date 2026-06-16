@@ -39,6 +39,13 @@ from .schemas import (
     AgentReviewCreate,
     BranchCreate,
     BranchRead,
+    AuditMaterialityResponse,
+    PortfolioOptimizeRequest,
+    PortfolioOptimizeResponse,
+    BsmPricingRequest,
+    BsmPricingResponse,
+    BondMetricsRequest,
+    BondMetricsResponse,
 )
 from .models import Company, JournalEntry, LedgerLine, SourceDocument, TransactionDraft, Product, CustomerProfile, AIAgent, Workflow, SimulationScenario, AnomalyAlert, DeveloperKey, MarketplaceAgent, Branch
 from fastapi import Body
@@ -91,6 +98,27 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup() -> None:
+    # Run dynamic database migrations for branch_id and branches support
+    import sqlalchemy
+    with engine.begin() as conn:
+        # Check and add branch_id to journal_entries
+        try:
+            columns = [row['name'] for row in conn.execute(sqlalchemy.text("PRAGMA table_info(journal_entries)")).mappings()]
+            if 'branch_id' not in columns:
+                conn.execute(sqlalchemy.text("ALTER TABLE journal_entries ADD COLUMN branch_id VARCHAR(36)"))
+                print("Migration: Added branch_id column to journal_entries")
+        except Exception as e:
+            print("Migration Error journal_entries:", e)
+            
+        # Check and add branch_id to transaction_drafts
+        try:
+            columns = [row['name'] for row in conn.execute(sqlalchemy.text("PRAGMA table_info(transaction_drafts)")).mappings()]
+            if 'branch_id' not in columns:
+                conn.execute(sqlalchemy.text("ALTER TABLE transaction_drafts ADD COLUMN branch_id VARCHAR(36)"))
+                print("Migration: Added branch_id column to transaction_drafts")
+        except Exception as e:
+            print("Migration Error transaction_drafts:", e)
+
     Base.metadata.create_all(bind=engine)
     from .database import SessionLocal
     from .services.seeding import seed_sudarshan_data
@@ -598,6 +626,73 @@ def run_digital_twin_simulation(company_id: str, payload: SimulationInput, db: S
         risk_level=risk_level,
         advice=advice
     )
+
+
+@app.get("/companies/{company_id}/audit/materiality-sampling", response_model=AuditMaterialityResponse)
+def get_audit_materiality_sampling(
+    company_id: str,
+    seed: int = 42,
+    sample_percent: float = 0.20,
+    branch_id: str | None = None,
+    db: Session = Depends(get_db)
+):
+    require_company(db, company_id)
+    from .services.audit import calculate_materiality_and_samples
+    res = calculate_materiality_and_samples(db, company_id, seed, sample_percent, branch_id)
+    return res
+
+
+@app.post("/companies/{company_id}/portfolio/optimize", response_model=PortfolioOptimizeResponse)
+def run_portfolio_optimization(
+    company_id: str,
+    payload: PortfolioOptimizeRequest,
+    db: Session = Depends(get_db)
+):
+    require_company(db, company_id)
+    from .services.portfolio import optimize_portfolio
+    res = optimize_portfolio(payload.tickers, payload.seed)
+    return res
+
+
+@app.post("/companies/{company_id}/portfolio/bsm-price", response_model=BsmPricingResponse)
+def run_bsm_option_pricing(
+    company_id: str,
+    payload: BsmPricingRequest,
+    db: Session = Depends(get_db)
+):
+    require_company(db, company_id)
+    from .services.portfolio import price_bsm_option
+    res = price_bsm_option(
+        float(payload.spot_price),
+        float(payload.strike_price),
+        float(payload.time_to_maturity_years),
+        float(payload.risk_free_rate),
+        float(payload.volatility),
+        payload.option_type
+    )
+    return res
+
+
+@app.post("/companies/{company_id}/portfolio/bond-metrics", response_model=BondMetricsResponse)
+def run_bond_metrics(
+    company_id: str,
+    payload: BondMetricsRequest,
+    db: Session = Depends(get_db)
+):
+    require_company(db, company_id)
+    from .services.portfolio import calculate_bond_metrics
+    mac_dur, mod_dur, convexity = calculate_bond_metrics(
+        float(payload.coupon),
+        float(payload.face_value),
+        float(payload.ytm),
+        payload.years
+    )
+    return {
+        "macaulay_duration_years": Decimal(str(mac_dur)).quantize(Decimal("0.0001")),
+        "modified_duration_years": Decimal(str(mod_dur)).quantize(Decimal("0.0001")),
+        "convexity": Decimal(str(convexity)).quantize(Decimal("0.0001"))
+    }
+
 
 
 @app.get("/companies/{company_id}/workflows", response_model=list[WorkflowRead])

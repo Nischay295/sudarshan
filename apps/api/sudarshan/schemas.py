@@ -335,5 +335,61 @@ class AgentReviewCreate(BaseModel):
     comment: str
 
 
+class AuditMaterialityResponse(BaseModel):
+    planning_materiality: Decimal
+    performance_materiality: Decimal
+    posting_materiality: Decimal
+    benchmark: str
+    benchmark_value: Decimal
+    sample_seed: int
+    sampled_transactions: list[TransactionDraftRead]
+
+
+class PortfolioOptimizeRequest(BaseModel):
+    tickers: list[str] = Field(default=["RELIANCE", "TCS", "INFOSYS", "HDFC", "ICICI"])
+    seed: int = 42
+
+
+class PortfolioOptimizeResponse(BaseModel):
+    optimal_weights: dict[str, Decimal]
+    expected_portfolio_return: Decimal
+    expected_portfolio_volatility: Decimal
+    sharpe_ratio: Decimal
+
+
+class BsmPricingRequest(BaseModel):
+    spot_price: Decimal
+    strike_price: Decimal
+    time_to_maturity_years: Decimal
+    risk_free_rate: Decimal
+    volatility: Decimal
+    option_type: str = "call"
+
+
+class BsmPricingResponse(BaseModel):
+    option_price: Decimal
+    d1: Decimal
+    d2: Decimal
+    delta: Decimal
+    gamma: Decimal
+    theta: Decimal
+    vega: Decimal
+    rho: Decimal
+
+
+class BondMetricsRequest(BaseModel):
+    coupon: Decimal
+    face_value: Decimal
+    ytm: Decimal
+    years: int
+
+
+class BondMetricsResponse(BaseModel):
+    macaulay_duration_years: Decimal
+    modified_duration_years: Decimal
+    convexity: Decimal
+
+
+
 
 

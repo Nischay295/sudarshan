@@ -504,6 +504,80 @@ export const api = {
     }>(`/companies/${companyId}/payments/verify`, {
       method: "POST",
       body: JSON.stringify(body)
+    }),
+  getAuditMateriality: (companyId: string, seed?: number, samplePercent?: number, branchId?: string) => {
+    const params = new URLSearchParams();
+    if (seed !== undefined) params.append("seed", seed.toString());
+    if (samplePercent !== undefined) params.append("sample_percent", samplePercent.toString());
+    if (branchId) params.append("branch_id", branchId);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return request<AuditMaterialityResponse>(`/companies/${companyId}/audit/materiality-sampling${qs}`);
+  },
+  optimizePortfolio: (companyId: string, body: { tickers: string[]; seed?: number }) =>
+    request<PortfolioOptimizeResponse>(`/companies/${companyId}/portfolio/optimize`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  priceBsmOption: (
+    companyId: string,
+    body: {
+      spot_price: number;
+      strike_price: number;
+      time_to_maturity_years: number;
+      risk_free_rate: number;
+      volatility: number;
+      option_type: string;
+    }
+  ) =>
+    request<BsmPricingResponse>(`/companies/${companyId}/portfolio/bsm-price`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  priceBondMetrics: (
+    companyId: string,
+    body: {
+      coupon: number;
+      face_value: number;
+      ytm: number;
+      years: number;
+    }
+  ) =>
+    request<BondMetricsResponse>(`/companies/${companyId}/portfolio/bond-metrics`, {
+      method: "POST",
+      body: JSON.stringify(body)
     })
 };
 
+export type AuditMaterialityResponse = {
+  planning_materiality: string;
+  performance_materiality: string;
+  posting_materiality: string;
+  benchmark: string;
+  benchmark_value: string;
+  sample_seed: number;
+  sampled_transactions: TransactionDraft[];
+};
+
+export type PortfolioOptimizeResponse = {
+  optimal_weights: Record<string, string>;
+  expected_portfolio_return: string;
+  expected_portfolio_volatility: string;
+  sharpe_ratio: string;
+};
+
+export type BsmPricingResponse = {
+  option_price: string;
+  d1: string;
+  d2: string;
+  delta: string;
+  gamma: string;
+  theta: string;
+  vega: string;
+  rho: string;
+};
+
+export type BondMetricsResponse = {
+  macaulay_duration_years: string;
+  modified_duration_years: string;
+  convexity: string;
+};

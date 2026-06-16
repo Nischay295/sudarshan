@@ -422,3 +422,66 @@ def test_create_and_verify_payment(client, db, seeded_company):
         # Restore environment variable
         os.environ.pop("RAZORPAY_KEY_SECRET", None)
 
+
+def test_audit_materiality_sampling(client, seeded_company):
+    response = client.get(f"/companies/{seeded_company.id}/audit/materiality-sampling?seed=42&sample_percent=0.2")
+    assert response.status_code == 200
+    data = response.json()
+    assert "planning_materiality" in data
+    assert "performance_materiality" in data
+    assert "posting_materiality" in data
+    assert "benchmark" in data
+    assert "sampled_transactions" in data
+    assert isinstance(data["sampled_transactions"], list)
+
+
+def test_portfolio_optimization(client, seeded_company):
+    payload = {
+        "tickers": ["RELIANCE", "TCS", "INFOSYS"],
+        "seed": 100
+    }
+    response = client.post(f"/companies/{seeded_company.id}/portfolio/optimize", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "optimal_weights" in data
+    assert "expected_portfolio_return" in data
+    assert "expected_portfolio_volatility" in data
+    assert "sharpe_ratio" in data
+    assert "RELIANCE" in data["optimal_weights"]
+
+
+def test_bsm_option_pricing(client, seeded_company):
+    payload = {
+        "spot_price": 100.0,
+        "strike_price": 105.0,
+        "time_to_maturity_years": 0.5,
+        "risk_free_rate": 0.05,
+        "volatility": 0.20,
+        "option_type": "call"
+    }
+    response = client.post(f"/companies/{seeded_company.id}/portfolio/bsm-price", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "option_price" in data
+    assert "delta" in data
+    assert "gamma" in data
+    assert "theta" in data
+    assert "vega" in data
+    assert "rho" in data
+
+
+def test_bond_metrics(client, seeded_company):
+    payload = {
+        "coupon": 8.0,
+        "face_value": 100.0,
+        "ytm": 0.06,
+        "years": 5
+    }
+    response = client.post(f"/companies/{seeded_company.id}/portfolio/bond-metrics", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "macaulay_duration_years" in data
+    assert "modified_duration_years" in data
+    assert "convexity" in data
+
+
