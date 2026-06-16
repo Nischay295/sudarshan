@@ -14,6 +14,7 @@ from ..models import (
     LedgerLine,
     NormalBalance,
     TransactionDraft,
+    Branch,
 )
 
 MONEY = Decimal("0.01")
@@ -99,6 +100,14 @@ def create_company_with_template(db: Session, name: str, gstin: str | None, fy_s
     )
     db.add(company)
     db.flush()
+    # Create default Main Branch
+    main_branch = Branch(
+        company_id=company.id,
+        name="Main Branch",
+        code="MAIN"
+    )
+    db.add(main_branch)
+    db.flush()
     seed_chart_of_accounts(db, company.id)
     db.add(
         AuditEvent(
@@ -152,6 +161,7 @@ def create_exception_draft(
 ) -> TransactionDraft:
     draft = TransactionDraft(
         company_id=company_id,
+        branch_id=getattr(payload, "branch_id", None),
         source_document_id=payload.source_document_id,
         entry_date=payload.entry_date,
         description=payload.description,
@@ -218,8 +228,10 @@ def post_classified_transaction(
         for line in classification.lines
     }
 
+    branch_id = getattr(payload, "branch_id", None)
     draft = TransactionDraft(
         company_id=company_id,
+        branch_id=branch_id,
         source_document_id=payload.source_document_id,
         entry_date=payload.entry_date,
         description=payload.description,
@@ -238,6 +250,7 @@ def post_classified_transaction(
     sequence = db.query(JournalEntry).filter(JournalEntry.company_id == company_id).count() + 1
     journal = JournalEntry(
         company_id=company_id,
+        branch_id=branch_id,
         draft_id=draft.id,
         entry_number=f"JE-{sequence:05d}",
         entry_date=payload.entry_date,

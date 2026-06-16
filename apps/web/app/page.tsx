@@ -19,7 +19,9 @@ import {
   ExecutiveSummary,
   DeveloperKey,
   MarketplaceAgent,
-  SimulationScenario
+  SimulationScenario,
+  API_BASE_URL,
+  Branch
 } from "../lib/api";
 import {
   Building2,
@@ -151,6 +153,18 @@ export default function AccountantWorkspace() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
   const [isLoadingCompanies, setIsLoadingCompanies] = useState<boolean>(true);
   const [isSubscribing, setIsSubscribing] = useState<boolean>(false);
+  const [showApiSettings, setShowApiSettings] = useState(false);
+  const [tempApiUrl, setTempApiUrl] = useState(API_BASE_URL);
+  
+  // Branch Management States
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("all");
+  const [newBranchName, setNewBranchName] = useState("");
+  const [newBranchCode, setNewBranchCode] = useState("");
+  const [isCreatingBranch, setIsCreatingBranch] = useState(false);
+  const [txBranchId, setTxBranchId] = useState("");
+
+
 
   // Forms State
   const [showCompanyForm, setShowCompanyForm] = useState<boolean>(false);
@@ -234,29 +248,31 @@ export default function AccountantWorkspace() {
   }, [selectedCompanyId]);
 
   // Fetch all company-specific details
-  const loadCompanyData = useCallback(async (companyId: string, startDate?: string, endDate?: string) => {
+  const loadCompanyData = useCallback(async (companyId: string, startDate?: string, endDate?: string, branchId?: string) => {
     if (!companyId) return;
     setApiError(null);
+    const apiBranchId = branchId === "all" ? undefined : branchId;
     try {
       const [
         draftsList, journalsList, tb, pl, bs, gst, advisory, alertList, agentList, workflowList, customerList, execSum,
-        keysList, marketplaceList, scenariosList
+        keysList, marketplaceList, scenariosList, branchesList
       ] = await Promise.all([
-        api.transactions(companyId).catch(() => [] as TransactionDraft[]),
-        api.journals(companyId).catch(() => [] as JournalEntry[]),
-        api.trialBalance(companyId, startDate, endDate).catch(() => null),
-        api.profitLoss(companyId, startDate, endDate).catch(() => null),
-        api.balanceSheet(companyId, startDate, endDate).catch(() => null),
-        api.gstSummary(companyId, startDate, endDate).catch(() => null),
-        api.managementReport(companyId, startDate, endDate).catch(() => null),
+        api.transactions(companyId, apiBranchId).catch(() => [] as TransactionDraft[]),
+        api.journals(companyId, apiBranchId).catch(() => [] as JournalEntry[]),
+        api.trialBalance(companyId, startDate, endDate, apiBranchId).catch(() => null),
+        api.profitLoss(companyId, startDate, endDate, apiBranchId).catch(() => null),
+        api.balanceSheet(companyId, startDate, endDate, apiBranchId).catch(() => null),
+        api.gstSummary(companyId, startDate, endDate, apiBranchId).catch(() => null),
+        api.managementReport(companyId, startDate, endDate, apiBranchId).catch(() => null),
         api.getFounderInsights(companyId).catch(() => [] as AnomalyAlert[]),
         api.getAgents(companyId).catch(() => [] as AIAgent[]),
         api.getWorkflows(companyId).catch(() => [] as Workflow[]),
         api.getCustomers(companyId).catch(() => [] as CustomerProfile[]),
-        api.getExecutiveSummary(companyId).catch(() => null),
+        api.getExecutiveSummary(companyId, apiBranchId).catch(() => null),
         api.getDeveloperKeys(companyId).catch(() => [] as DeveloperKey[]),
         api.getMarketplaceAgents(companyId).catch(() => [] as MarketplaceAgent[]),
-        api.getSimulationScenarios(companyId).catch(() => [] as SimulationScenario[])
+        api.getSimulationScenarios(companyId).catch(() => [] as SimulationScenario[]),
+        api.branches(companyId).catch(() => [] as Branch[])
       ]);
 
       setDrafts(draftsList);
@@ -274,6 +290,11 @@ export default function AccountantWorkspace() {
       setDevKeys(keysList);
       setMAgents(marketplaceList);
       setScenarios(scenariosList);
+      setBranches(branchesList);
+
+      if (branchesList.length > 0) {
+        setTxBranchId(prev => prev || branchesList[0].id);
+      }
 
       if (workflowList.length > 0) {
         setSelectedWorkflow(workflowList[0]);
@@ -300,6 +321,27 @@ export default function AccountantWorkspace() {
       setApiError(err.message || "Failed to create developer key");
     } finally {
       setIsCreatingKey(false);
+    }
+  };
+
+  const handleCreateBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCompanyId || !newBranchName.trim() || !newBranchCode.trim()) return;
+    setIsCreatingBranch(true);
+    setApiError(null);
+    try {
+      const newBranch = await api.createBranch(selectedCompanyId, {
+        name: newBranchName,
+        code: newBranchCode
+      });
+      setBranches(prev => [...prev, newBranch]);
+      setNewBranchName("");
+      setNewBranchCode("");
+      setTxSuccessMessage(`Branch "${newBranch.name}" created successfully.`);
+    } catch (err: any) {
+      setApiError(err.message || "Failed to create branch");
+    } finally {
+      setIsCreatingBranch(false);
     }
   };
 
@@ -374,20 +416,16 @@ export default function AccountantWorkspace() {
     loadCompanies(true);
   }, []);
 
-  // Reload data when selected company changes
+  // Reload data when selected company or branch changes
   useEffect(() => {
     if (selectedCompanyId) {
       const active = companies.find(c => c.id === selectedCompanyId);
-      if (active) {
-        setFilterStartDate(active.financial_year_start);
-        setFilterEndDate(active.financial_year_end);
-        loadCompanyData(selectedCompanyId, active.financial_year_start, active.financial_year_end);
-      } else {
-        loadCompanyData(selectedCompanyId);
-      }
+      const start = filterStartDate || (active ? active.financial_year_start : undefined);
+      const end = filterEndDate || (active ? active.financial_year_end : undefined);
+      loadCompanyData(selectedCompanyId, start, end, selectedBranchId);
       setTxSuccessMessage(null);
     }
-  }, [selectedCompanyId, loadCompanyData, companies]);
+  }, [selectedCompanyId, selectedBranchId, loadCompanyData, companies]);
 
   const activeCompany = companies.find(c => c.id === selectedCompanyId);
 
@@ -584,7 +622,8 @@ export default function AccountantWorkspace() {
         counterparty: txCounterparty.trim() || undefined,
         gst_rate: txGstRate,
         gst_treatment: txGstTreatment,
-        payment_account_code: txPaymentAccount
+        payment_account_code: txPaymentAccount,
+        branch_id: txBranchId || undefined
       });
 
       if (response.journal_entry) {
@@ -1097,18 +1136,113 @@ export default function AccountantWorkspace() {
 
           </div>
 
-          <div className="api-pill">
-            <span
+          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            {selectedCompanyId && branches.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginRight: "10px" }}>
+                <span style={{ fontSize: "12px", color: "var(--teal-ink)", opacity: 0.8 }}>Branch:</span>
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: "4px",
+                    border: "1px solid var(--border-color)",
+                    background: "rgba(255, 255, 255, 0.05)",
+                    color: "var(--text-color)",
+                    fontSize: "12px",
+                    cursor: "pointer"
+                  }}
+                >
+                  <option value="all" style={{ background: "var(--bg-card)" }}>Consolidated (All Branches)</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id} style={{ background: "var(--bg-card)" }}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="api-pill" style={{ cursor: "pointer" }} onClick={() => setShowApiSettings(!showApiSettings)}>
+              <span
+                style={{
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "50%",
+                  background: selectedCompanyId ? "#10b981" : "#ef4444"
+                }}
+              ></span>
+              <span>{selectedCompanyId ? "API Online" : "Disconnected"}</span>
+            </div>
+            <button 
+              onClick={() => setShowApiSettings(!showApiSettings)}
               style={{
-                width: "8px",
-                height: "8px",
-                borderRadius: "50%",
-                background: selectedCompanyId ? "#10b981" : "#ef4444"
+                background: "transparent",
+                border: "none",
+                color: "var(--teal-ink)",
+                opacity: 0.7,
+                cursor: "pointer",
+                padding: "4px",
+                display: "flex",
+                alignItems: "center",
+                borderRadius: "4px"
               }}
-            ></span>
-            <span>{selectedCompanyId ? "API Online" : "Disconnected"}</span>
+              title="API Server Settings"
+            >
+              <Settings size={18} />
+            </button>
           </div>
         </div>
+
+        {/* API Server Settings Panel */}
+        {showApiSettings && (
+          <div className="panel" style={{ marginBottom: "20px", padding: "16px", border: "1px solid var(--border-color)", background: "var(--bg-card)" }}>
+            <h3 style={{ fontSize: "16px", marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px", color: "var(--teal-ink)" }}>
+              <Globe size={18} /> API Server Settings
+            </h3>
+            <p style={{ fontSize: "12px", color: "var(--teal-ink)", opacity: 0.8, marginBottom: "12px" }}>
+              Configure the backend API URL. If you deployed your backend on Render.com under a custom name, enter its URL here.
+            </p>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                value={tempApiUrl}
+                onChange={(e) => setTempApiUrl(e.target.value)}
+                placeholder="https://your-api.onrender.com"
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  borderRadius: "4px",
+                  border: "1px solid var(--border-color)",
+                  background: "rgba(255, 255, 255, 0.05)",
+                  color: "var(--text-color)"
+                }}
+              />
+              <button
+                className="button-primary"
+                onClick={() => {
+                  localStorage.setItem("sudarshan_api_url", tempApiUrl);
+                  setShowApiSettings(false);
+                  window.location.reload();
+                }}
+                style={{ padding: "8px 16px" }}
+              >
+                Save & Reload
+              </button>
+              <button
+                className="button-secondary"
+                onClick={() => {
+                  localStorage.removeItem("sudarshan_api_url");
+                  setTempApiUrl("https://sudarshan-api.onrender.com");
+                  setShowApiSettings(false);
+                  window.location.reload();
+                }}
+                style={{ padding: "8px 16px" }}
+              >
+                Reset Default
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ERROR / SUCCESS DISPLAYS */}
         {apiError && (
@@ -2608,16 +2742,32 @@ export default function AccountantWorkspace() {
                     </div>
                   </div>
 
-                  <div className="field">
-                    <label htmlFor="txPaymentAccount">Payment / Bank Account</label>
-                    <select
-                      id="txPaymentAccount"
-                      value={txPaymentAccount}
-                      onChange={(e) => setTxPaymentAccount(e.target.value)}
-                    >
-                      <option value="1010">Bank (Code 1010)</option>
-                      <option value="1000">Cash (Code 1000)</option>
-                    </select>
+                  <div className="two-col">
+                    <div className="field">
+                      <label htmlFor="txPaymentAccount">Payment / Bank Account</label>
+                      <select
+                        id="txPaymentAccount"
+                        value={txPaymentAccount}
+                        onChange={(e) => setTxPaymentAccount(e.target.value)}
+                      >
+                        <option value="1010">Bank (Code 1010)</option>
+                        <option value="1000">Cash (Code 1000)</option>
+                      </select>
+                    </div>
+                    {branches.length > 0 && (
+                      <div className="field">
+                        <label htmlFor="txBranch">Assigned Branch *</label>
+                        <select
+                          id="txBranch"
+                          value={txBranchId}
+                          onChange={(e) => setTxBranchId(e.target.value)}
+                        >
+                          {branches.map(b => (
+                            <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   <div className="button-row" style={{ marginTop: "14px" }}>
@@ -3479,6 +3629,108 @@ export default function AccountantWorkspace() {
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Branch Management Card */}
+            <div className="panel">
+              <div className="panel-header">
+                <div className="panel-title">
+                  <Building2 size={20} style={{ color: "var(--teal)" }} />
+                  <div>
+                    <h3>Branch Management</h3>
+                    <p>Create and manage different locations or business divisions under this company.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="panel-body">
+                {/* Create New Branch Form */}
+                <form onSubmit={handleCreateBranch} style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+                  <input
+                    type="text"
+                    placeholder="Branch Name (e.g. Mumbai Branch)"
+                    required
+                    value={newBranchName}
+                    onChange={(e) => setNewBranchName(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border-color)",
+                      background: "rgba(255, 255, 255, 0.05)",
+                      color: "var(--text-color)",
+                      fontSize: "13px"
+                    }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Code (e.g. MUMBAI)"
+                    required
+                    value={newBranchCode}
+                    onChange={(e) => setNewBranchCode(e.target.value.toUpperCase())}
+                    style={{
+                      width: "120px",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border-color)",
+                      background: "rgba(255, 255, 255, 0.05)",
+                      color: "var(--text-color)",
+                      fontSize: "13px"
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={isCreatingBranch || !newBranchName.trim() || !newBranchCode.trim()}
+                    className="btn primary"
+                    style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                  >
+                    {isCreatingBranch ? <RefreshCw size={14} className="spin" /> : <Plus size={16} />}
+                    <span>Add Branch</span>
+                  </button>
+                </form>
+
+                {/* List of branches */}
+                <div className="table-wrap" style={{ border: "1px solid var(--border-color)", borderRadius: "8px" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Branch Name</th>
+                        <th>Code</th>
+                        <th>Created At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {branches.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} style={{ textAlign: "center", color: "var(--muted)", padding: "20px" }}>
+                            No branches found.
+                          </td>
+                        </tr>
+                      ) : (
+                        branches.map((b) => (
+                          <tr key={b.id}>
+                            <td style={{ fontWeight: 800 }}>{b.name}</td>
+                            <td>
+                              <code style={{
+                                background: "rgba(255, 255, 255, 0.05)",
+                                padding: "4px 8px",
+                                borderRadius: "4px",
+                                fontFamily: "monospace",
+                                fontSize: "12px",
+                                color: "var(--teal-ink)"
+                              }}>
+                                {b.code}
+                              </code>
+                            </td>
+                            <td style={{ fontSize: "12px", color: "var(--muted)" }}>
+                              {new Date(b.created_at).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>

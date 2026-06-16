@@ -19,7 +19,7 @@ from .accounting import money
 ZERO = Decimal("0.00")
 
 
-def _account_totals(db: Session, company_id: str, start_date=None, end_date=None):
+def _account_totals(db: Session, company_id: str, start_date=None, end_date=None, branch_id=None):
     from ..models import JournalEntry, LedgerLine
     
     # Subquery to aggregate ledger line totals for the company within the date range
@@ -37,6 +37,8 @@ def _account_totals(db: Session, company_id: str, start_date=None, end_date=None
         sub = sub.filter(JournalEntry.entry_date >= start_date)
     if end_date:
         sub = sub.filter(JournalEntry.entry_date <= end_date)
+    if branch_id:
+        sub = sub.filter(JournalEntry.branch_id == branch_id)
         
     sub = sub.group_by(LedgerLine.account_id).subquery()
     
@@ -59,12 +61,12 @@ def _account_totals(db: Session, company_id: str, start_date=None, end_date=None
     return totals
 
 
-def trial_balance(db: Session, company_id: str, start_date=None, end_date=None) -> TrialBalanceReport:
+def trial_balance(db: Session, company_id: str, start_date=None, end_date=None, branch_id=None) -> TrialBalanceReport:
     report_rows: list[TrialBalanceRow] = []
     total_debit = ZERO
     total_credit = ZERO
 
-    for item in _account_totals(db, company_id, start_date, end_date):
+    for item in _account_totals(db, company_id, start_date, end_date, branch_id):
         account: Account = item["account"]
         debit_total = money(item["debit"])
         credit_total = money(item["credit"])
@@ -93,10 +95,10 @@ def trial_balance(db: Session, company_id: str, start_date=None, end_date=None) 
     )
 
 
-def profit_loss(db: Session, company_id: str, start_date=None, end_date=None) -> ProfitLossReport:
+def profit_loss(db: Session, company_id: str, start_date=None, end_date=None, branch_id=None) -> ProfitLossReport:
     income = ZERO
     expenses = ZERO
-    for item in _account_totals(db, company_id, start_date, end_date):
+    for item in _account_totals(db, company_id, start_date, end_date, branch_id):
         account: Account = item["account"]
         debit = money(item["debit"])
         credit = money(item["credit"])
@@ -107,13 +109,13 @@ def profit_loss(db: Session, company_id: str, start_date=None, end_date=None) ->
     return ProfitLossReport(income=money(income), expenses=money(expenses), net_profit=money(income - expenses))
 
 
-def balance_sheet(db: Session, company_id: str, start_date=None, end_date=None) -> BalanceSheetReport:
+def balance_sheet(db: Session, company_id: str, start_date=None, end_date=None, branch_id=None) -> BalanceSheetReport:
     assets = ZERO
     liabilities = ZERO
     equity = ZERO
-    pnl = profit_loss(db, company_id, start_date, end_date)
+    pnl = profit_loss(db, company_id, start_date, end_date, branch_id)
 
-    for item in _account_totals(db, company_id, start_date, end_date):
+    for item in _account_totals(db, company_id, start_date, end_date, branch_id):
         account: Account = item["account"]
         debit = money(item["debit"])
         credit = money(item["credit"])
@@ -134,17 +136,17 @@ def balance_sheet(db: Session, company_id: str, start_date=None, end_date=None) 
     )
 
 
-def cash_flow(db: Session, company_id: str, start_date=None, end_date=None) -> CashFlowReport:
+def cash_flow(db: Session, company_id: str, start_date=None, end_date=None, branch_id=None) -> CashFlowReport:
     net = ZERO
     bank_codes = {"1000", "1010"}
-    for item in _account_totals(db, company_id, start_date, end_date):
+    for item in _account_totals(db, company_id, start_date, end_date, branch_id):
         account: Account = item["account"]
         if account.code in bank_codes:
             net += money(item["debit"] - item["credit"])
     return CashFlowReport(opening_cash_placeholder=ZERO, net_cash_movement=money(net), closing_cash=money(net))
 
 
-def gst_summary(db: Session, company_id: str, start_date=None, end_date=None) -> GSTSummaryReport:
+def gst_summary(db: Session, company_id: str, start_date=None, end_date=None, branch_id=None) -> GSTSummaryReport:
     from ..models import JournalEntry
     buckets = defaultdict(lambda: ZERO)
     query = db.query(LedgerLine).join(JournalEntry, LedgerLine.journal_entry_id == JournalEntry.id).filter(
@@ -155,6 +157,8 @@ def gst_summary(db: Session, company_id: str, start_date=None, end_date=None) ->
         query = query.filter(JournalEntry.entry_date >= start_date)
     if end_date:
         query = query.filter(JournalEntry.entry_date <= end_date)
+    if branch_id:
+        query = query.filter(JournalEntry.branch_id == branch_id)
         
     lines = query.all()
     for line in lines:
@@ -176,11 +180,11 @@ def gst_summary(db: Session, company_id: str, start_date=None, end_date=None) ->
     )
 
 
-def management_report(db: Session, company_id: str, start_date=None, end_date=None) -> ManagementReport:
-    tb = trial_balance(db, company_id, start_date, end_date)
-    pnl = profit_loss(db, company_id, start_date, end_date)
-    bs = balance_sheet(db, company_id, start_date, end_date)
-    gst = gst_summary(db, company_id, start_date, end_date)
+def management_report(db: Session, company_id: str, start_date=None, end_date=None, branch_id=None) -> ManagementReport:
+    tb = trial_balance(db, company_id, start_date, end_date, branch_id)
+    pnl = profit_loss(db, company_id, start_date, end_date, branch_id)
+    bs = balance_sheet(db, company_id, start_date, end_date, branch_id)
+    gst = gst_summary(db, company_id, start_date, end_date, branch_id)
     notes: list[str] = []
     advice: list[str] = []
 

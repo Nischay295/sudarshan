@@ -49,6 +49,20 @@ class CompanyRead(BaseModel):
     created_at: datetime
 
 
+class BranchCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=200)
+    code: str = Field(min_length=1, max_length=50)
+
+
+class BranchRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    code: str
+    created_at: datetime
+
+
 class AccountRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -87,6 +101,7 @@ class ManualTransactionCreate(BaseModel):
     gst_treatment: GSTTreatment = "none"
     payment_account_code: str = Field(default="1010", max_length=20)
     source_document_id: str | None = None
+    branch_id: str | None = None
 
 
 class TransactionDraftRead(BaseModel):
@@ -104,6 +119,7 @@ class TransactionDraftRead(BaseModel):
     status: DraftStatus
     classification_reason: str | None
     exception_reason: str | None
+    branch_id: str | None
     created_at: datetime
 
 
@@ -124,6 +140,7 @@ class JournalEntryRead(BaseModel):
     entry_date: date
     narration: str
     status: JournalStatus
+    branch_id: str | None
     created_at: datetime
     lines: list[LedgerLineRead]
 

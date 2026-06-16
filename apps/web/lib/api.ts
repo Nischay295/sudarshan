@@ -1,4 +1,12 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://sudarshan-api.onrender.com";
+const getApiBaseUrl = (): string => {
+  if (typeof window !== "undefined") {
+    const override = localStorage.getItem("sudarshan_api_url");
+    if (override) return override;
+  }
+  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://sudarshan-api.onrender.com";
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export type Company = {
   id: string;
@@ -26,6 +34,15 @@ export type TransactionDraft = {
   status: DraftStatus;
   classification_reason: string | null;
   exception_reason: string | null;
+  branch_id: string | null;
+  created_at: string;
+};
+
+export type Branch = {
+  id: string;
+  company_id: string;
+  name: string;
+  code: string;
   created_at: string;
 };
 
@@ -46,6 +63,7 @@ export type JournalEntry = {
   entry_date: string;
   narration: string;
   status: string;
+  branch_id: string | null;
   created_at: string;
   lines: LedgerLine[];
 };
@@ -295,46 +313,64 @@ export const api = {
       gst_rate: string;
       gst_treatment: string;
       payment_account_code: string;
+      branch_id?: string | null;
     }
   ) =>
     request<TransactionResponse>(`/companies/${companyId}/transactions/manual`, {
       method: "POST",
       body: JSON.stringify(body)
     }),
-  transactions: (companyId: string) => request<TransactionDraft[]>(`/companies/${companyId}/transactions`),
-  journals: (companyId: string) => request<JournalEntry[]>(`/companies/${companyId}/journal-entries`),
-  trialBalance: (companyId: string, startDate?: string, endDate?: string) => {
+  transactions: (companyId: string, branchId?: string) => {
+    const qs = branchId ? `?branch_id=${branchId}` : "";
+    return request<TransactionDraft[]>(`/companies/${companyId}/transactions${qs}`);
+  },
+  journals: (companyId: string, branchId?: string) => {
+    const qs = branchId ? `?branch_id=${branchId}` : "";
+    return request<JournalEntry[]>(`/companies/${companyId}/journal-entries${qs}`);
+  },
+  branches: (companyId: string) => request<Branch[]>(`/companies/${companyId}/branches`),
+  createBranch: (companyId: string, body: { name: string; code: string }) =>
+    request<Branch>(`/companies/${companyId}/branches`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  trialBalance: (companyId: string, startDate?: string, endDate?: string, branchId?: string) => {
     const params = new URLSearchParams();
     if (startDate) params.append("start_date", startDate);
     if (endDate) params.append("end_date", endDate);
+    if (branchId) params.append("branch_id", branchId);
     const qs = params.toString() ? `?${params.toString()}` : "";
     return request<TrialBalance>(`/companies/${companyId}/reports/trial-balance${qs}`);
   },
-  profitLoss: (companyId: string, startDate?: string, endDate?: string) => {
+  profitLoss: (companyId: string, startDate?: string, endDate?: string, branchId?: string) => {
     const params = new URLSearchParams();
     if (startDate) params.append("start_date", startDate);
     if (endDate) params.append("end_date", endDate);
+    if (branchId) params.append("branch_id", branchId);
     const qs = params.toString() ? `?${params.toString()}` : "";
     return request<ProfitLoss>(`/companies/${companyId}/reports/profit-loss${qs}`);
   },
-  balanceSheet: (companyId: string, startDate?: string, endDate?: string) => {
+  balanceSheet: (companyId: string, startDate?: string, endDate?: string, branchId?: string) => {
     const params = new URLSearchParams();
     if (startDate) params.append("start_date", startDate);
     if (endDate) params.append("end_date", endDate);
+    if (branchId) params.append("branch_id", branchId);
     const qs = params.toString() ? `?${params.toString()}` : "";
     return request<BalanceSheet>(`/companies/${companyId}/reports/balance-sheet${qs}`);
   },
-  gstSummary: (companyId: string, startDate?: string, endDate?: string) => {
+  gstSummary: (companyId: string, startDate?: string, endDate?: string, branchId?: string) => {
     const params = new URLSearchParams();
     if (startDate) params.append("start_date", startDate);
     if (endDate) params.append("end_date", endDate);
+    if (branchId) params.append("branch_id", branchId);
     const qs = params.toString() ? `?${params.toString()}` : "";
     return request<GSTSummary>(`/companies/${companyId}/reports/gst-summary${qs}`);
   },
-  managementReport: (companyId: string, startDate?: string, endDate?: string) => {
+  managementReport: (companyId: string, startDate?: string, endDate?: string, branchId?: string) => {
     const params = new URLSearchParams();
     if (startDate) params.append("start_date", startDate);
     if (endDate) params.append("end_date", endDate);
+    if (branchId) params.append("branch_id", branchId);
     const qs = params.toString() ? `?${params.toString()}` : "";
     return request<ManagementReport>(`/companies/${companyId}/ai/management-report${qs}`);
   },
@@ -366,7 +402,10 @@ export const api = {
       body: JSON.stringify(workflow)
     }),
   getCustomers: (companyId: string) => request<CustomerProfile[]>(`/companies/${companyId}/customers`),
-  getExecutiveSummary: (companyId: string) => request<ExecutiveSummary>(`/companies/${companyId}/executive-summary`),
+  getExecutiveSummary: (companyId: string, branchId?: string) => {
+    const qs = branchId ? `?branch_id=${branchId}` : "";
+    return request<ExecutiveSummary>(`/companies/${companyId}/executive-summary${qs}`);
+  },
 
   uploadTransactions: (companyId: string, file: File) => {
     const formData = new FormData();

@@ -37,8 +37,10 @@ from .schemas import (
     MarketplaceAgentCreate,
     MarketplaceAgentRead,
     AgentReviewCreate,
+    BranchCreate,
+    BranchRead,
 )
-from .models import Company, JournalEntry, LedgerLine, SourceDocument, TransactionDraft, Product, CustomerProfile, AIAgent, Workflow, SimulationScenario, AnomalyAlert, DeveloperKey, MarketplaceAgent
+from .models import Company, JournalEntry, LedgerLine, SourceDocument, TransactionDraft, Product, CustomerProfile, AIAgent, Workflow, SimulationScenario, AnomalyAlert, DeveloperKey, MarketplaceAgent, Branch
 from fastapi import Body
 
 from .services.accounting import create_company_with_template, create_exception_draft, post_classified_transaction
@@ -204,6 +206,30 @@ def list_accounts(company_id: str, db: Session = Depends(get_db)):
     return sorted(company.accounts, key=lambda account: account.code)
 
 
+@app.get("/companies/{company_id}/branches", response_model=list[BranchRead])
+def list_branches(company_id: str, db: Session = Depends(get_db)):
+    require_company(db, company_id)
+    return db.query(Branch).filter(Branch.company_id == company_id).all()
+
+
+@app.post("/companies/{company_id}/branches", response_model=BranchRead)
+def create_branch(company_id: str, payload: BranchCreate, db: Session = Depends(get_db)):
+    require_company(db, company_id)
+    existing = db.query(Branch).filter(Branch.company_id == company_id, Branch.code == payload.code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Branch code already exists")
+    branch = Branch(
+        company_id=company_id,
+        name=payload.name,
+        code=payload.code
+    )
+    db.add(branch)
+    db.commit()
+    db.refresh(branch)
+    return branch
+
+
+
 @app.post("/companies/{company_id}/source-documents", response_model=SourceDocumentRead)
 def create_source_document(company_id: str, payload: SourceDocumentCreate, db: Session = Depends(get_db)):
     require_company(db, company_id)
@@ -253,26 +279,25 @@ def create_manual_transaction(company_id: str, payload: ManualTransactionCreate,
 
 
 @app.get("/companies/{company_id}/transactions", response_model=list[TransactionDraftRead])
-def list_transactions(company_id: str, db: Session = Depends(get_db)):
+def list_transactions(company_id: str, branch_id: str | None = None, db: Session = Depends(get_db)):
     require_company(db, company_id)
-    return (
-        db.query(TransactionDraft)
-        .filter(TransactionDraft.company_id == company_id)
-        .order_by(TransactionDraft.created_at.desc())
-        .all()
-    )
+    q = db.query(TransactionDraft).filter(TransactionDraft.company_id == company_id)
+    if branch_id:
+        q = q.filter(TransactionDraft.branch_id == branch_id)
+    return q.order_by(TransactionDraft.created_at.desc()).all()
 
 
 @app.get("/companies/{company_id}/journal-entries", response_model=list[JournalEntryRead])
-def list_journal_entries(company_id: str, db: Session = Depends(get_db)):
+def list_journal_entries(company_id: str, branch_id: str | None = None, db: Session = Depends(get_db)):
     require_company(db, company_id)
-    journals = (
+    q = (
         db.query(JournalEntry)
         .options(selectinload(JournalEntry.lines).selectinload(LedgerLine.account))
         .filter(JournalEntry.company_id == company_id)
-        .order_by(JournalEntry.entry_date.desc(), JournalEntry.created_at.desc())
-        .all()
     )
+    if branch_id:
+        q = q.filter(JournalEntry.branch_id == branch_id)
+    journals = q.order_by(JournalEntry.entry_date.desc(), JournalEntry.created_at.desc()).all()
     return [journal_to_schema(journal) for journal in journals]
 
 
@@ -281,10 +306,11 @@ def get_trial_balance(
     company_id: str,
     start_date: date | None = None,
     end_date: date | None = None,
+    branch_id: str | None = None,
     db: Session = Depends(get_db)
 ):
     require_company(db, company_id)
-    return trial_balance(db, company_id, start_date, end_date)
+    return trial_balance(db, company_id, start_date, end_date, branch_id)
 
 
 @app.get("/companies/{company_id}/reports/profit-loss", response_model=ProfitLossReport)
@@ -292,10 +318,11 @@ def get_profit_loss(
     company_id: str,
     start_date: date | None = None,
     end_date: date | None = None,
+    branch_id: str | None = None,
     db: Session = Depends(get_db)
 ):
     require_company(db, company_id)
-    return profit_loss(db, company_id, start_date, end_date)
+    return profit_loss(db, company_id, start_date, end_date, branch_id)
 
 
 @app.get("/companies/{company_id}/reports/balance-sheet", response_model=BalanceSheetReport)
@@ -303,10 +330,11 @@ def get_balance_sheet(
     company_id: str,
     start_date: date | None = None,
     end_date: date | None = None,
+    branch_id: str | None = None,
     db: Session = Depends(get_db)
 ):
     require_company(db, company_id)
-    return balance_sheet(db, company_id, start_date, end_date)
+    return balance_sheet(db, company_id, start_date, end_date, branch_id)
 
 
 @app.get("/companies/{company_id}/reports/cash-flow", response_model=CashFlowReport)
@@ -314,10 +342,11 @@ def get_cash_flow(
     company_id: str,
     start_date: date | None = None,
     end_date: date | None = None,
+    branch_id: str | None = None,
     db: Session = Depends(get_db)
 ):
     require_company(db, company_id)
-    return cash_flow(db, company_id, start_date, end_date)
+    return cash_flow(db, company_id, start_date, end_date, branch_id)
 
 
 @app.get("/companies/{company_id}/reports/gst-summary", response_model=GSTSummaryReport)
@@ -325,10 +354,11 @@ def get_gst_summary(
     company_id: str,
     start_date: date | None = None,
     end_date: date | None = None,
+    branch_id: str | None = None,
     db: Session = Depends(get_db)
 ):
     require_company(db, company_id)
-    return gst_summary(db, company_id, start_date, end_date)
+    return gst_summary(db, company_id, start_date, end_date, branch_id)
 
 
 @app.get("/companies/{company_id}/ai/management-report", response_model=ManagementReport)
@@ -336,10 +366,11 @@ def get_management_report(
     company_id: str,
     start_date: date | None = None,
     end_date: date | None = None,
+    branch_id: str | None = None,
     db: Session = Depends(get_db)
 ):
     require_company(db, company_id)
-    return management_report(db, company_id, start_date, end_date)
+    return management_report(db, company_id, start_date, end_date, branch_id)
 
 
 @app.post("/companies/{company_id}/reset")
@@ -605,7 +636,7 @@ def get_customers(company_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/companies/{company_id}/executive-summary")
-def get_executive_summary(company_id: str, db: Session = Depends(get_db)):
+def get_executive_summary(company_id: str, branch_id: str | None = None, db: Session = Depends(get_db)):
     require_company(db, company_id)
     
     # Calculate baseline counts
@@ -615,7 +646,7 @@ def get_executive_summary(company_id: str, db: Session = Depends(get_db)):
     
     # Core finances
     from .services.reports import profit_loss
-    pl_rep = profit_loss(db, company_id, None, None)
+    pl_rep = profit_loss(db, company_id, None, None, branch_id)
     
     return {
         "revenue": pl_rep.income,

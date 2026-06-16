@@ -57,6 +57,19 @@ class Company(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     accounts: Mapped[list["Account"]] = relationship(back_populates="company", cascade="all, delete-orphan")
+    branches: Mapped[list["Branch"]] = relationship(back_populates="company", cascade="all, delete-orphan")
+
+
+class Branch(Base):
+    __tablename__ = "branches"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    code: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    company: Mapped[Company] = relationship(back_populates="branches")
 
 
 class Account(Base):
@@ -97,6 +110,7 @@ class TransactionDraft(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), nullable=True)
     source_document_id: Mapped[str | None] = mapped_column(ForeignKey("source_documents.id"), nullable=True)
     entry_date: Mapped[date] = mapped_column(Date, nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -117,6 +131,7 @@ class JournalEntry(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), nullable=True)
     draft_id: Mapped[str | None] = mapped_column(ForeignKey("transaction_drafts.id"), nullable=True)
     entry_number: Mapped[str] = mapped_column(String(40), nullable=False)
     entry_date: Mapped[date] = mapped_column(Date, nullable=False)
