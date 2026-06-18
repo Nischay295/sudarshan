@@ -64,7 +64,7 @@ class Branch(Base):
     __tablename__ = "branches"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     code: Mapped[str] = mapped_column(String(50), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
@@ -94,7 +94,7 @@ class SourceDocument(Base):
     __tablename__ = "source_documents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     document_type: Mapped[str] = mapped_column(String(50), nullable=False, default="manual")
     file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -109,8 +109,8 @@ class TransactionDraft(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
-    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), nullable=True)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), nullable=True, index=True)
     source_document_id: Mapped[str | None] = mapped_column(ForeignKey("source_documents.id"), nullable=True)
     entry_date: Mapped[date] = mapped_column(Date, nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -130,11 +130,11 @@ class JournalEntry(Base):
     __tablename__ = "journal_entries"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
-    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), nullable=True)
-    draft_id: Mapped[str | None] = mapped_column(ForeignKey("transaction_drafts.id"), nullable=True)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
+    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id"), nullable=True, index=True)
+    draft_id: Mapped[str | None] = mapped_column(ForeignKey("transaction_drafts.id"), nullable=True, index=True)
     entry_number: Mapped[str] = mapped_column(String(40), nullable=False)
-    entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     narration: Mapped[str] = mapped_column(String(500), nullable=False)
     status: Mapped[JournalStatus] = mapped_column(SAEnum(JournalStatus, native_enum=False), default=JournalStatus.POSTED, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
@@ -146,9 +146,9 @@ class LedgerLine(Base):
     __tablename__ = "ledger_lines"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
-    journal_entry_id: Mapped[str] = mapped_column(ForeignKey("journal_entries.id"), nullable=False)
-    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
+    journal_entry_id: Mapped[str] = mapped_column(ForeignKey("journal_entries.id"), nullable=False, index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
     debit: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("0.00"))
     credit: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("0.00"))
     description: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -163,7 +163,7 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     actor: Mapped[str] = mapped_column(String(100), nullable=False, default="system")
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -176,7 +176,7 @@ class Product(Base):
     __tablename__ = "products"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     sku: Mapped[str] = mapped_column(String(50), nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
@@ -189,7 +189,7 @@ class CustomerProfile(Base):
     __tablename__ = "customer_profiles"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     purchase_count: Mapped[int] = mapped_column(default=0, nullable=False)
@@ -204,7 +204,7 @@ class AIAgent(Base):
     __tablename__ = "ai_agents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -217,7 +217,7 @@ class Workflow(Base):
     __tablename__ = "workflows"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     trigger_event: Mapped[str] = mapped_column(String(100), nullable=False)
     nodes_json: Mapped[str] = mapped_column(Text, nullable=False)
@@ -229,7 +229,7 @@ class SimulationScenario(Base):
     __tablename__ = "simulation_scenarios"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     params_json: Mapped[str] = mapped_column(Text, nullable=False)
@@ -241,7 +241,7 @@ class AnomalyAlert(Base):
     __tablename__ = "anomaly_alerts"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
@@ -254,7 +254,7 @@ class DeveloperKey(Base):
     __tablename__ = "developer_keys"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     key_name: Mapped[str] = mapped_column(String(100), nullable=False)
     api_key: Mapped[str] = mapped_column(String(100), nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
@@ -265,7 +265,7 @@ class MarketplaceAgent(Base):
     __tablename__ = "marketplace_agents"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
+    company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False, index=True)
     developer_name: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
