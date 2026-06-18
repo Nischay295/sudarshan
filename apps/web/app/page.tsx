@@ -60,7 +60,11 @@ import {
   Plus,
   ArrowRight,
   History,
-  CreditCard
+  CreditCard,
+  Calculator,
+  Layers,
+  Clock,
+  Wallet
 } from "lucide-react";
 
 
@@ -80,6 +84,7 @@ export default function AccountantWorkspace() {
     | "reports"
     | "advisory"
     | "developer"
+    | "adjustments"
   >("dashboard");
 
   // AI Commerce Operating System State
@@ -187,6 +192,54 @@ export default function AccountantWorkspace() {
   const [txGstTreatment, setTxGstTreatment] = useState("intra_state");
   const [txPaymentAccount, setTxPaymentAccount] = useState("1010");
 
+  // ── Period-End Adjustments State ──────────────────────────────────────────
+  const [adjTab, setAdjTab] = useState<"depreciation" | "impairment" | "amortization" | "accrual" | "prepayment">("depreciation");
+  const [adjPosting, setAdjPosting] = useState(false);
+  const [adjSuccess, setAdjSuccess] = useState<string | null>(null);
+  const [adjError, setAdjError]     = useState<string | null>(null);
+
+  // Depreciation wizard
+  const [depAssetName,   setDepAssetName]   = useState("");
+  const [depAccount,     setDepAccount]     = useState("1510");
+  const [depCost,        setDepCost]        = useState("");
+  const [depResidual,    setDepResidual]    = useState("0");
+  const [depLife,        setDepLife]        = useState("5");
+  const [depMethod,      setDepMethod]      = useState<"slm" | "wdv">("slm");
+  const [depWdvRate,     setDepWdvRate]     = useState("20");
+  const [depBookValue,   setDepBookValue]   = useState("");
+  const [depPeriod,      setDepPeriod]      = useState<"annual" | "monthly">("annual");
+  const [depDate,        setDepDate]        = useState(new Date().toISOString().split("T")[0]);
+
+  // Impairment wizard
+  const [impAssetName,   setImpAssetName]   = useState("");
+  const [impAccount,     setImpAccount]     = useState("1510");
+  const [impBookValue,   setImpBookValue]   = useState("");
+  const [impRecoverable, setImpRecoverable] = useState("");
+  const [impDate,        setImpDate]        = useState(new Date().toISOString().split("T")[0]);
+
+  // Amortization wizard
+  const [amoAssetName,   setAmoAssetName]   = useState("");
+  const [amoAccount,     setAmoAccount]     = useState("1710");
+  const [amoCost,        setAmoCost]        = useState("");
+  const [amoPeriodMonths,setAmoPeriodMonths]= useState("36");
+  const [amoPeriod,      setAmoPeriod]      = useState<"monthly" | "annual">("monthly");
+  const [amoDate,        setAmoDate]        = useState(new Date().toISOString().split("T")[0]);
+
+  // Accrual wizard
+  const [acrType,        setAcrType]        = useState<"expense" | "revenue">("expense");
+  const [acrDesc,        setAcrDesc]        = useState("");
+  const [acrAccount,     setAcrAccount]     = useState("2110");
+  const [acrAmount,      setAcrAmount]      = useState("");
+  const [acrDate,        setAcrDate]        = useState(new Date().toISOString().split("T")[0]);
+
+  // Prepayment wizard
+  const [preDesc,        setPreDesc]        = useState("");
+  const [preTotalPaid,   setPreTotalPaid]   = useState("");
+  const [preMonthsCovered, setPreMonthsCovered] = useState("12");
+  const [preMonthsConsumed,setPreMonthsConsumed] = useState("1");
+  const [preDate,        setPreDate]        = useState(new Date().toISOString().split("T")[0]);
+
+
   // Ingestion File State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -206,7 +259,7 @@ export default function AccountantWorkspace() {
   const [advisoryReport, setAdvisoryReport] = useState<ManagementReport | null>(null);
 
   // UI status
-  const [activeReportTab, setActiveReportTab] = useState<"tb" | "pl" | "bs" | "gst" | "flow" | "investor">("tb");
+  const [activeReportTab, setActiveReportTab] = useState<"tb" | "pl" | "bs" | "gst" | "flow" | "investor" | "analytics">("tb");
   const [isSubmittingTx, setIsSubmittingTx] = useState(false);
   const [isSubmittingCompany, setIsSubmittingCompany] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -691,6 +744,71 @@ export default function AccountantWorkspace() {
     }
   };
 
+
+  // ── Post a Period-End Adjustment Entry ────────────────────────────────────
+  const postAdjustmentEntry = async (description: string, amount: number, date: string) => {
+    if (!selectedCompanyId) return;
+    setAdjPosting(true);
+    setAdjError(null);
+    setAdjSuccess(null);
+    try {
+      const res = await api.postTransaction(selectedCompanyId, {
+        entry_date: date,
+        description: `[ADJUSTMENT] ${description}`,
+        amount: String(amount),
+        flow: "expense",
+        gst_rate: "0",
+        gst_treatment: "intra_state",
+        payment_account_code: "1010",
+        branch_id: txBranchId || undefined
+      });
+      if (res.journal_entry) {
+        setAdjSuccess(`Posted: ${res.journal_entry.entry_number} — ${description}`);
+        await loadCompanyData(selectedCompanyId);
+      } else {
+        setAdjError("Entry created as draft — check exceptions.");
+      }
+    } catch (err: any) {
+      setAdjError(err.message || "Failed to post adjustment entry");
+    } finally {
+      setAdjPosting(false);
+    }
+  };
+
+  // ── Depreciation calculation helpers ──────────────────────────────────────
+  const calcDepreciation = () => {
+    const cost = parseFloat(depCost) || 0;
+    const residual = parseFloat(depResidual) || 0;
+    const life = parseInt(depLife) || 1;
+    const wdvRate = parseFloat(depWdvRate) || 0;
+    const bookVal = parseFloat(depBookValue) || cost;
+    let annual = 0;
+    if (depMethod === "slm") {
+      annual = (cost - residual) / life;
+    } else {
+      annual = bookVal * (wdvRate / 100);
+    }
+    return depPeriod === "annual" ? annual : annual / 12;
+  };
+
+  // ── Amortization calculation ───────────────────────────────────────────────
+  const calcAmortization = () => {
+    const cost = parseFloat(amoCost) || 0;
+    const months = parseInt(amoPeriodMonths) || 1;
+    const monthly = cost / months;
+    return amoPeriod === "annual" ? monthly * 12 : monthly;
+  };
+
+  // ── Prepayment calculation ─────────────────────────────────────────────────
+  const calcPrepayment = () => {
+    const total = parseFloat(preTotalPaid) || 0;
+    const covered = parseInt(preMonthsCovered) || 1;
+    const consumed = parseInt(preMonthsConsumed) || 0;
+    const monthly = total / covered;
+    return { expense: monthly * consumed, remaining: total - monthly * consumed, monthly };
+  };
+
+
   // --- AI-POWERED COMMERCE OPERATING SYSTEM HELPERS ---
 
   // 1. AI Workspace Chat
@@ -1061,6 +1179,15 @@ export default function AccountantWorkspace() {
             <Sparkles size={18} />
             <span>AI Advisory</span>
           </button>
+
+          <button
+            disabled={!selectedCompanyId}
+            onClick={() => { setActiveSection("adjustments"); setApiError(null); setTxSuccessMessage(null); setAdjSuccess(null); setAdjError(null); }}
+            className={`nav-item ${activeSection === "adjustments" ? "active" : ""}`}
+          >
+            <Calculator size={18} />
+            <span>Period Adjustments</span>
+          </button>
         </nav>
 
         {/* Sidebar Footer */}
@@ -1118,6 +1245,7 @@ export default function AccountantWorkspace() {
               {activeSection === "reports" && "Indian Standard Accounting Reports"}
               {activeSection === "advisory" && "AI Management Commentary"}
               {activeSection === "developer" && "Developer Portal & Integration Hub"}
+              {activeSection === "adjustments" && "Period-End Adjustments"}
             </h2>
             <p>
               {activeSection === "dashboard" && "Jarvis-style anomaly alerts and automated decision recommendations computed in your general ledger."}
@@ -1132,6 +1260,7 @@ export default function AccountantWorkspace() {
               {activeSection === "reports" && "Trial Balance, Profit & Loss, Balance Sheet, and GST reconciliation summaries generated directly from ledger postings."}
               {activeSection === "advisory" && "Management explanations, anomaly alerts, business commentary, and strategic advice generated based on financial results."}
               {activeSection === "developer" && "Manage API keys, inspect real-time webhook delivery logs, and download SDK boilerplates for third-party agents."}
+              {activeSection === "adjustments" && "Record depreciation, impairment losses, amortization, accruals, and prepayments with auto-generated double-entry journal lines."}
             </p>
 
           </div>
@@ -3129,6 +3258,12 @@ export default function AccountantWorkspace() {
               >
                 Investor Report
               </button>
+              <button
+                onClick={() => setActiveReportTab("analytics")}
+                className={`tab ${activeReportTab === "analytics" ? "active" : ""}`}
+              >
+                Data Analytics
+              </button>
             </div>
 
             {/* TAB CONTENT: TRIAL BALANCE */}
@@ -3233,25 +3368,79 @@ export default function AccountantWorkspace() {
                     </div>
                   </div>
 
-                  <div style={{ marginTop: "24px", border: "1px solid var(--line)", borderRadius: "8px", padding: "16px", background: "var(--surface)" }}>
-                    <h4 style={{ margin: "0 0 12px 0" }}>Flow Analysis Summary</h4>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span>Sales Revenue (Direct Goods):</span>
-                        <span style={{ fontWeight: 800 }}>
-                          ₹ {trialBalance?.rows.find(r => r.account_code === "4000")
-                            ? parseFloat(trialBalance.rows.find(r => r.account_code === "4000")!.closing_credit).toLocaleString("en-IN", { minimumFractionDigits: 2 })
-                            : "0.00"}
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span>Service Income (Professional / Support):</span>
-                        <span style={{ fontWeight: 800 }}>
-                          ₹ {trialBalance?.rows.find(r => r.account_code === "4100")
-                            ? parseFloat(trialBalance.rows.find(r => r.account_code === "4100")!.closing_credit).toLocaleString("en-IN", { minimumFractionDigits: 2 })
-                            : "0.00"}
-                        </span>
-                      </div>
+                  {/* Detailed Profit & Loss Table */}
+                  <div style={{ marginTop: "24px", border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
+                    <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
+                      Statement of Profit & Loss (Operating Revenue & Expenses)
+                    </div>
+                    <div className="table-wrap">
+                      <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid var(--line)", background: "var(--surface-3)" }}>
+                            <th style={{ padding: "10px 14px", textAlign: "left" }}>Account Code & Name</th>
+                            <th style={{ padding: "10px 14px", textAlign: "right" }}>Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Income Section */}
+                          <tr style={{ background: "var(--surface-2)", fontWeight: 700 }}>
+                            <td style={{ padding: "8px 14px" }} colSpan={2}>Operating Revenue (Income)</td>
+                          </tr>
+                          {trialBalance?.rows.filter(r => r.account_type === "income").map(r => {
+                            const bal = parseFloat(r.closing_credit) - parseFloat(r.closing_debit);
+                            return (
+                              <tr key={r.account_code} style={{ borderBottom: "1px solid var(--line)" }}>
+                                <td style={{ padding: "8px 14px", paddingLeft: "24px" }}>
+                                  <span style={{ color: "var(--muted)", marginRight: "8px" }}>{r.account_code}</span>
+                                  {r.account_name}
+                                </td>
+                                <td style={{ padding: "8px 14px", textAlign: "right", fontWeight: 600 }}>
+                                  ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr style={{ borderBottom: "2px solid var(--line)", fontWeight: 700 }}>
+                            <td style={{ padding: "10px 14px", paddingLeft: "14px" }}>Total Income:</td>
+                            <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--green)" }}>
+                              ₹ {profitLoss ? parseFloat(profitLoss.income).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                            </td>
+                          </tr>
+
+                          {/* Expense Section */}
+                          <tr style={{ background: "var(--surface-2)", fontWeight: 700 }}>
+                            <td style={{ padding: "8px 14px" }} colSpan={2}>Operating Expenses</td>
+                          </tr>
+                          {trialBalance?.rows.filter(r => r.account_type === "expense").map(r => {
+                            const bal = parseFloat(r.closing_debit) - parseFloat(r.closing_credit);
+                            return (
+                              <tr key={r.account_code} style={{ borderBottom: "1px solid var(--line)" }}>
+                                <td style={{ padding: "8px 14px", paddingLeft: "24px" }}>
+                                  <span style={{ color: "var(--muted)", marginRight: "8px" }}>{r.account_code}</span>
+                                  {r.account_name}
+                                </td>
+                                <td style={{ padding: "8px 14px", textAlign: "right", fontWeight: 600 }}>
+                                  ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr style={{ borderBottom: "2px solid var(--line)", fontWeight: 700 }}>
+                            <td style={{ padding: "10px 14px", paddingLeft: "14px" }}>Total Expenses:</td>
+                            <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--rose)" }}>
+                              ₹ {profitLoss ? parseFloat(profitLoss.expenses).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                            </td>
+                          </tr>
+
+                          {/* Net Profit Section */}
+                          <tr style={{ background: "var(--surface-3)", fontWeight: 800, fontSize: "14px" }}>
+                            <td style={{ padding: "12px 14px" }}>Net Profit / (Loss) for the Period:</td>
+                            <td style={{ padding: "12px 14px", textAlign: "right", color: profitLoss && parseFloat(profitLoss.net_profit) >= 0 ? "var(--teal)" : "var(--rose)" }}>
+                              ₹ {profitLoss ? parseFloat(profitLoss.net_profit).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
@@ -3291,262 +3480,153 @@ export default function AccountantWorkspace() {
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "20px" }}>
-                    {/* Column 1: Accounting Equation Check */}
-                    <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                      <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
-                        Accounting Equation Verification Check
+                  <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
+                    <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "14px" }}>
+                      Accounting Equation Verification Check
+                    </div>
+                    <div style={{ padding: "14px", display: "grid", gap: "10px", fontSize: "13px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span>Assets:</span>
+                        <span>₹ {balanceSheet ? parseFloat(balanceSheet.assets).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}</span>
                       </div>
-                      <div style={{ padding: "16px", display: "grid", gap: "12px", fontSize: "13px", flex: 1 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>Total Assets:</span>
-                          <strong>₹ {balanceSheet ? parseFloat(balanceSheet.assets).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}</strong>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span>Liabilities + Equity:</span>
+                        <span>
+                          ₹ {balanceSheet ? (parseFloat(balanceSheet.liabilities) + parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit)).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--line)", fontWeight: 800 }}>
+                        <span>Difference:</span>
+                        <span style={{ color: balanceSheet?.balanced ? "var(--green)" : "var(--rose)" }}>
+                          ₹ {balanceSheet ? Math.abs(parseFloat(balanceSheet.assets) - (parseFloat(balanceSheet.liabilities) + parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit))).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: "24px", display: "flex", flexDirection: "column", gap: "24px" }}>
+                    {/* Left Column: Assets */}
+                    <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                      <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "14px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line)" }}>
+                        <span>Assets</span>
+                        <span>Debit Balance</span>
+                      </div>
+                      <div className="table-wrap" style={{ flex: 1 }}>
+                        <table style={{ width: "100%", fontSize: "13px" }}>
+                          <tbody>
+                            {trialBalance?.rows.filter(r => r.account_type === "asset").map(r => {
+                              const bal = parseFloat(r.closing_debit) - parseFloat(r.closing_credit);
+                              return (
+                                <tr key={r.account_code}>
+                                  <td style={{ padding: "8px 14px" }}>
+                                    <span style={{ color: "var(--muted)", marginRight: "8px" }}>{r.account_code}</span>
+                                    {r.account_name}
+                                  </td>
+                                  <td style={{ padding: "8px 14px", textAlign: "right", fontWeight: 700 }}>
+                                    ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {(!trialBalance || trialBalance.rows.filter(r => r.account_type === "asset").length === 0) && (
+                              <tr>
+                                <td colSpan={2} style={{ padding: "14px", textAlign: "center", color: "var(--muted)" }}>No asset accounts found.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "13px", display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)", marginTop: "auto" }}>
+                        <span>Total Assets:</span>
+                        <span>₹ {balanceSheet ? parseFloat(balanceSheet.assets).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}</span>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Liabilities & Equity */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                      {/* Liabilities Section */}
+                      <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
+                        <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "14px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line)" }}>
+                          <span>Liabilities</span>
+                          <span>Credit Balance</span>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>Total Liabilities + Equity:</span>
-                          <strong>
-                            ₹ {balanceSheet ? (parseFloat(balanceSheet.liabilities) + parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit)).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
-                          </strong>
+                        <div className="table-wrap">
+                          <table style={{ width: "100%", fontSize: "13px" }}>
+                            <tbody>
+                              {trialBalance?.rows.filter(r => r.account_type === "liability").map(r => {
+                                const bal = parseFloat(r.closing_credit) - parseFloat(r.closing_debit);
+                                return (
+                                  <tr key={r.account_code}>
+                                    <td style={{ padding: "8px 14px" }}>
+                                      <span style={{ color: "var(--muted)", marginRight: "8px" }}>{r.account_code}</span>
+                                      {r.account_name}
+                                    </td>
+                                    <td style={{ padding: "8px 14px", textAlign: "right", fontWeight: 700 }}>
+                                      ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {(!trialBalance || trialBalance.rows.filter(r => r.account_type === "liability").length === 0) && (
+                                <tr>
+                                  <td colSpan={2} style={{ padding: "14px", textAlign: "center", color: "var(--muted)" }}>No liability accounts found.</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--line)", fontWeight: 800 }}>
-                          <span>Difference:</span>
-                          <span style={{ color: balanceSheet?.balanced ? "var(--green)" : "var(--rose)" }}>
-                            ₹ {balanceSheet ? Math.abs(parseFloat(balanceSheet.assets) - (parseFloat(balanceSheet.liabilities) + parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit))).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
+                        <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "13px", display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)" }}>
+                          <span>Total Liabilities:</span>
+                          <span>₹ {balanceSheet ? parseFloat(balanceSheet.liabilities).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}</span>
+                        </div>
+                      </div>
+
+                      {/* Equity Section */}
+                      <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
+                        <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "14px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line)" }}>
+                          <span>Owner's Equity & Retained Earnings</span>
+                          <span>Credit Balance</span>
+                        </div>
+                        <div className="table-wrap">
+                          <table style={{ width: "100%", fontSize: "13px" }}>
+                            <tbody>
+                              {trialBalance?.rows.filter(r => r.account_type === "equity").map(r => {
+                                const bal = parseFloat(r.closing_credit) - parseFloat(r.closing_debit);
+                                return (
+                                  <tr key={r.account_code}>
+                                    <td style={{ padding: "8px 14px" }}>
+                                      <span style={{ color: "var(--muted)", marginRight: "8px" }}>{r.account_code}</span>
+                                      {r.account_name}
+                                    </td>
+                                    <td style={{ padding: "8px 14px", textAlign: "right", fontWeight: 700 }}>
+                                      ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {/* Current period profit is also equity */}
+                              {balanceSheet && (
+                                <tr>
+                                  <td style={{ padding: "8px 14px" }}>
+                                    <span style={{ color: "var(--muted)", marginRight: "8px" }}>P&L</span>
+                                    Current Period Profit / Loss
+                                  </td>
+                                  <td style={{ padding: "8px 14px", textAlign: "right", fontWeight: 700, color: parseFloat(balanceSheet.current_period_profit) >= 0 ? "var(--green)" : "var(--rose)" }}>
+                                    ₹ {parseFloat(balanceSheet.current_period_profit).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div style={{ background: "var(--surface-2)", padding: "10px 14px", fontWeight: 800, fontSize: "13px", display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)" }}>
+                          <span>Total Equity:</span>
+                          <span>
+                            ₹ {balanceSheet ? (parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit)).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
                           </span>
                         </div>
                       </div>
                     </div>
-
-                    {/* Column 2: Quick Audit Statistics */}
-                    <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                      <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
-                        Audit Ratios & Leverage Metrics
-                      </div>
-                      <div style={{ padding: "16px", display: "grid", gap: "12px", fontSize: "13px", flex: 1 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>Debt-to-Equity Ratio:</span>
-                          <strong>
-                            {balanceSheet && (parseFloat(balanceSheet.equity) !== 0) 
-                              ? (parseFloat(balanceSheet.liabilities) / (parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit))).toFixed(2)
-                              : "0.00"}
-                          </strong>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>Asset Turnover Ratio:</span>
-                          <strong>
-                            {balanceSheet && parseFloat(balanceSheet.assets) !== 0 && execSummary
-                              ? (parseFloat(execSummary.revenue) / parseFloat(balanceSheet.assets)).toFixed(2)
-                              : "N/A"}
-                          </strong>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--line)" }}>
-                          <span>Solvency Status:</span>
-                          <span style={{ color: "var(--teal)", fontWeight: 800 }}>Adequate</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Unified Balance Sheet Table */}
-                  <div style={{ marginTop: "24px", border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
-                    <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "15px", borderBottom: "1px solid var(--line)" }}>
-                      Balance Sheet Statement (Unified Report Format)
-                    </div>
-                    <div className="table-wrap" style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", minWidth: "auto", borderCollapse: "collapse", fontSize: "13px" }}>
-                        <thead>
-                          <tr style={{ background: "rgba(255, 255, 255, 0.02)" }}>
-                            <th style={{ padding: "10px 16px", fontWeight: 800 }}>Account Details</th>
-                            <th style={{ padding: "10px 16px", fontWeight: 800, textAlign: "right" }}>Balance</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {/* 1. ASSETS SECTION */}
-                          <tr style={{ background: "rgba(var(--teal-rgb), 0.05)", fontWeight: 800 }}>
-                            <td colSpan={2} style={{ padding: "10px 16px", color: "var(--teal)", textTransform: "uppercase", fontSize: "11px", letterSpacing: "1px" }}>
-                              Assets
-                            </td>
-                          </tr>
-                          {trialBalance?.rows.filter(r => r.account_type === "asset").map(r => {
-                            const bal = parseFloat(r.closing_debit) - parseFloat(r.closing_credit);
-                            return (
-                              <tr key={r.account_code}>
-                                <td style={{ padding: "8px 24px" }}>
-                                  <span style={{ color: "var(--muted)", marginRight: "12px" }}>{r.account_code}</span>
-                                  {r.account_name}
-                                </td>
-                                <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 700 }}>
-                                  ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          <tr style={{ fontWeight: 800, borderTop: "1px solid var(--line)" }}>
-                            <td style={{ padding: "10px 16px", paddingLeft: "24px" }}>Total Assets</td>
-                            <td style={{ padding: "10px 16px", textAlign: "right", color: "var(--teal)" }}>
-                              ₹ {balanceSheet ? parseFloat(balanceSheet.assets).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
-                            </td>
-                          </tr>
-
-                          {/* 2. LIABILITIES SECTION */}
-                          <tr style={{ background: "rgba(255, 107, 107, 0.05)", fontWeight: 800 }}>
-                            <td colSpan={2} style={{ padding: "10px 16px", color: "var(--rose)", textTransform: "uppercase", fontSize: "11px", letterSpacing: "1px" }}>
-                              Liabilities
-                            </td>
-                          </tr>
-                          {trialBalance?.rows.filter(r => r.account_type === "liability").map(r => {
-                            const bal = parseFloat(r.closing_credit) - parseFloat(r.closing_debit);
-                            return (
-                              <tr key={r.account_code}>
-                                <td style={{ padding: "8px 24px" }}>
-                                  <span style={{ color: "var(--muted)", marginRight: "12px" }}>{r.account_code}</span>
-                                  {r.account_name}
-                                </td>
-                                <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 700 }}>
-                                  ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          <tr style={{ fontWeight: 800, borderTop: "1px solid var(--line)" }}>
-                            <td style={{ padding: "10px 16px", paddingLeft: "24px" }}>Total Liabilities</td>
-                            <td style={{ padding: "10px 16px", textAlign: "right" }}>
-                              ₹ {balanceSheet ? parseFloat(balanceSheet.liabilities).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
-                            </td>
-                          </tr>
-
-                          {/* 3. EQUITY SECTION */}
-                          <tr style={{ background: "rgba(255, 255, 255, 0.04)", fontWeight: 800 }}>
-                            <td colSpan={2} style={{ padding: "10px 16px", color: "var(--muted)", textTransform: "uppercase", fontSize: "11px", letterSpacing: "1px" }}>
-                              Owner's Equity
-                            </td>
-                          </tr>
-                          {trialBalance?.rows.filter(r => r.account_type === "equity").map(r => {
-                            const bal = parseFloat(r.closing_credit) - parseFloat(r.closing_debit);
-                            return (
-                              <tr key={r.account_code}>
-                                <td style={{ padding: "8px 24px" }}>
-                                  <span style={{ color: "var(--muted)", marginRight: "12px" }}>{r.account_code}</span>
-                                  {r.account_name}
-                                </td>
-                                <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 700 }}>
-                                  ₹ {bal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          {balanceSheet && (
-                            <tr>
-                              <td style={{ padding: "8px 24px" }}>
-                                <span style={{ color: "var(--muted)", marginRight: "12px" }}>P&L</span>
-                                Current Period Retained Earnings (Profit)
-                              </td>
-                              <td style={{ padding: "8px 16px", textAlign: "right", fontWeight: 700, color: parseFloat(balanceSheet.current_period_profit) >= 0 ? "var(--green)" : "var(--rose)" }}>
-                                ₹ {parseFloat(balanceSheet.current_period_profit).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                              </td>
-                            </tr>
-                          )}
-                          <tr style={{ fontWeight: 800, borderTop: "1px solid var(--line)" }}>
-                            <td style={{ padding: "10px 16px", paddingLeft: "24px" }}>Total Equity</td>
-                            <td style={{ padding: "10px 16px", textAlign: "right" }}>
-                              ₹ {balanceSheet ? (parseFloat(balanceSheet.equity) + parseFloat(balanceSheet.current_period_profit)).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Data Analytics & Company Insights Section */}
-                  <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                    
-                    {/* Left Card: Company Analytics & KPI Summary */}
-                    <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                      <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
-                        📊 Company Performance Summary (Analytics Report)
-                      </div>
-                      <div style={{ padding: "16px", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
-                        {execSummary ? (
-                          <div style={{ display: "grid", gap: "12px", fontSize: "13px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <span>Fiscal Year Revenue:</span>
-                              <strong>₹ {parseFloat(execSummary.revenue).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <span>Net profit margin:</span>
-                              <strong style={{ color: parseFloat(execSummary.net_profit) >= 0 ? "var(--green)" : "var(--rose)" }}>
-                                ₹ {parseFloat(execSummary.net_profit).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                              </strong>
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <span>Revenue Growth Rate:</span>
-                              <span style={{ color: "var(--teal)", fontWeight: 800 }}>{execSummary.revenue_growth}</span>
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <span>Customer Count:</span>
-                              <strong>{execSummary.customer_count} Active</strong>
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <span>Product SKU Catalog:</span>
-                              <strong>{execSummary.product_count} Items</strong>
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--line)" }}>
-                              <span>Company Risk Rating:</span>
-                              <span className={`status ${execSummary.risk_level === "low" ? "good" : execSummary.risk_level === "medium" ? "warn" : "bad"}`} style={{ textTransform: "capitalize", padding: "2px 8px", fontSize: "11px" }}>
-                                {execSummary.risk_level} Risk
-                              </span>
-                            </div>
-                            <div style={{ color: "var(--muted)", fontSize: "12px", fontStyle: "italic", marginTop: "4px" }}>
-                              "{execSummary.risk_summary}"
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ textAlign: "center", color: "var(--muted)", padding: "24px" }}>
-                            No company performance summary analytics available.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Right Card: Business Advisory & AI Commentary */}
-                    <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-                      <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
-                        💡 AI Business & Management Advisory
-                      </div>
-                      <div style={{ padding: "16px", flex: 1, overflowY: "auto", fontSize: "13px" }}>
-                        {advisoryReport ? (
-                          <div style={{ display: "grid", gap: "14px" }}>
-                            <div>
-                              <div style={{ fontWeight: 800, color: "var(--teal)", marginBottom: "4px" }}>Executive Summary</div>
-                              <p style={{ color: "var(--text)", lineHeight: "1.4", margin: 0 }}>
-                                {advisoryReport.management_summary}
-                              </p>
-                            </div>
-                            <div>
-                              <div style={{ fontWeight: 800, color: "var(--teal)", marginBottom: "4px" }}>Accounting Explanation</div>
-                              <p style={{ color: "var(--muted)", lineHeight: "1.4", margin: 0 }}>
-                                {advisoryReport.accountant_explanation}
-                              </p>
-                            </div>
-                            {advisoryReport.business_advice?.length > 0 && (
-                              <div>
-                                <div style={{ fontWeight: 800, color: "var(--teal)", marginBottom: "4px" }}>Key Actionable Advice</div>
-                                <ul style={{ margin: 0, paddingLeft: "20px", color: "var(--text)", lineHeight: "1.4" }}>
-                                  {advisoryReport.business_advice.slice(0, 3).map((advice, idx) => (
-                                    <li key={idx} style={{ marginBottom: "4px" }}>{advice}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div style={{ textAlign: "center", color: "var(--muted)", padding: "24px" }}>
-                            No business advisory analysis loaded.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
                   </div>
                 </div>
               </div>
@@ -3838,6 +3918,175 @@ export default function AccountantWorkspace() {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {activeReportTab === "analytics" && (
+              <div className="panel">
+                <div className="panel-header">
+                  <div className="panel-title">
+                    <TrendingUp size={18} style={{ color: "var(--teal)" }} />
+                    <div>
+                      <h3>Business & Company Data Analytics</h3>
+                      <p>Advanced statistical breakdowns of products, customers, and operational KPIs.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="panel-body" style={{ display: "grid", gap: "24px" }}>
+                  {(() => {
+                    const productsList = [
+                      { id: "1", name: "Wireless Headphones", sku: "HW-WH-001", price: "45231.00", stock_quantity: 3, reorder_point: 10 },
+                      { id: "2", name: "Smart Watch Series 8", sku: "HW-SW-008", price: "32456.00", stock_quantity: 25, reorder_point: 12 },
+                      { id: "3", name: "Running Shoes", sku: "AP-RS-002", price: "28965.00", stock_quantity: 14, reorder_point: 15 },
+                      { id: "4", name: "Coffee Maker", sku: "AP-CM-012", price: "18642.00", stock_quantity: 8, reorder_point: 8 },
+                      { id: "5", name: "Backpack Travel", sku: "AP-BT-099", price: "12357.00", stock_quantity: 19, reorder_point: 10 }
+                    ];
+
+                    return (
+                      <>
+                        {/* Business Analytics Report Section */}
+                        <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
+                          <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
+                            1. Business Analytics Report (Products & Customer Insights)
+                          </div>
+                          <div style={{ padding: "16px", display: "grid", gap: "20px" }}>
+                            
+                            {/* Products Inventory & Valuation Table */}
+                            <div>
+                              <h4 style={{ margin: "0 0 10px 0", fontSize: "13px", color: "var(--teal)" }}>Product Metrics & Valuation</h4>
+                              <div className="table-wrap">
+                                <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
+                                  <thead>
+                                    <tr style={{ background: "var(--surface-3)", borderBottom: "1px solid var(--line)" }}>
+                                      <th style={{ padding: "8px 12px", textAlign: "left" }}>Product Name</th>
+                                      <th style={{ padding: "8px 12px", textAlign: "left" }}>SKU</th>
+                                      <th style={{ padding: "8px 12px", textAlign: "right" }}>Unit Price</th>
+                                      <th style={{ padding: "8px 12px", textAlign: "right" }}>Stock Qty</th>
+                                      <th style={{ padding: "8px 12px", textAlign: "right" }}>Total Valuation</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {productsList.map(p => {
+                                      const totalVal = parseFloat(p.price) * p.stock_quantity;
+                                      return (
+                                        <tr key={p.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                                          <td style={{ padding: "8px 12px", fontWeight: 600 }}>{p.name}</td>
+                                          <td style={{ padding: "8px 12px", color: "var(--muted)" }}>{p.sku}</td>
+                                          <td style={{ padding: "8px 12px", textAlign: "right" }}>₹ {parseFloat(p.price).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                                          <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                                            <span className={`status ${p.stock_quantity <= p.reorder_point ? "bad" : "good"}`} style={{ padding: "2px 6px", fontSize: "11px" }}>
+                                              {p.stock_quantity} (Min: {p.reorder_point})
+                                            </span>
+                                          </td>
+                                          <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700 }}>₹ {totalVal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* Customer Revenue Contributions Table */}
+                            <div style={{ marginTop: "10px" }}>
+                              <h4 style={{ margin: "0 0 10px 0", fontSize: "13px", color: "var(--teal)" }}>Customer Value Dynamics</h4>
+                              <div className="table-wrap">
+                                <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
+                                  <thead>
+                                    <tr style={{ background: "var(--surface-3)", borderBottom: "1px solid var(--line)" }}>
+                                      <th style={{ padding: "8px 12px", textAlign: "left" }}>Customer / Client</th>
+                                      <th style={{ padding: "8px 12px", textAlign: "left" }}>GSTIN Reference</th>
+                                      <th style={{ padding: "8px 12px", textAlign: "left" }}>Email</th>
+                                      <th style={{ padding: "8px 12px", textAlign: "right" }}>Lifetime Transactions</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {customersList.length === 0 ? (
+                                      <tr>
+                                        <td colSpan={4} style={{ padding: "12px", textAlign: "center", color: "var(--muted)" }}>No customer profiles mapped.</td>
+                                      </tr>
+                                    ) : (
+                                      customersList.map(c => (
+                                        <tr key={c.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                                          <td style={{ padding: "8px 12px", fontWeight: 600 }}>{c.name}</td>
+                                          <td style={{ padding: "8px 12px", fontFamily: "monospace", color: "var(--muted)" }}>{c.behavior_segment}</td>
+                                          <td style={{ padding: "8px 12px" }}>{c.email}</td>
+                                          <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700 }}>
+                                            ₹ {parseFloat(c.total_spent).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                          </td>
+                                        </tr>
+                                      ))
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Company Report Section */}
+                        <div style={{ border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden" }}>
+                          <div style={{ background: "var(--surface-2)", padding: "12px 16px", fontWeight: 800, fontSize: "14px", borderBottom: "1px solid var(--line)" }}>
+                            2. Company Performance Report (KPI Dashboard & Operational Alerts)
+                          </div>
+                          <div style={{ padding: "16px", display: "grid", gap: "20px" }}>
+                            
+                            {/* Operational KPIs Grid */}
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+                              <div style={{ padding: "14px", borderRadius: "6px", background: "var(--surface-2)", border: "1px solid var(--line)" }}>
+                                <span style={{ fontSize: "11px", color: "var(--muted)", display: "block", marginBottom: "4px" }}>WORKING CAPITAL</span>
+                                <strong style={{ fontSize: "16px", color: "var(--teal)" }}>
+                                  ₹ {(() => {
+                                    if (!balanceSheet) return "0.00";
+                                    const wc = parseFloat(balanceSheet.assets) - parseFloat(balanceSheet.liabilities);
+                                    return wc.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+                                  })()}
+                                </strong>
+                              </div>
+                              <div style={{ padding: "14px", borderRadius: "6px", background: "var(--surface-2)", border: "1px solid var(--line)" }}>
+                                <span style={{ fontSize: "11px", color: "var(--muted)", display: "block", marginBottom: "4px" }}>CASH TO REVENUE RATIO</span>
+                                <strong style={{ fontSize: "16px", color: "var(--teal)" }}>
+                                  {(() => {
+                                    if (!trialBalance || !profitLoss || parseFloat(profitLoss.income) === 0) return "N/A";
+                                    const cashBank = trialBalance.rows
+                                      .filter(r => r.account_code === "1000" || r.account_code === "1010")
+                                      .reduce((sum, r) => sum + (parseFloat(r.closing_debit) - parseFloat(r.closing_credit)), 0);
+                                    return ((cashBank / parseFloat(profitLoss.income)) * 100).toFixed(1) + "%";
+                                  })()}
+                                </strong>
+                              </div>
+                              <div style={{ padding: "14px", borderRadius: "6px", background: "var(--surface-2)", border: "1px solid var(--line)" }}>
+                                <span style={{ fontSize: "11px", color: "var(--muted)", display: "block", marginBottom: "4px" }}>ANOMALY ALERTS ACTIVE</span>
+                                <strong style={{ fontSize: "16px", color: alerts.length > 0 ? "var(--rose)" : "var(--green)" }}>
+                                  {alerts.length} Warnings
+                                </strong>
+                              </div>
+                            </div>
+
+                            {/* Anomaly & Risk Report Summary */}
+                            {alerts.length > 0 && (
+                              <div style={{ border: "1px solid rgba(244, 63, 94, 0.15)", borderRadius: "6px", background: "rgba(244, 63, 94, 0.02)", padding: "14px" }}>
+                                <h4 style={{ margin: "0 0 8px 0", fontSize: "12px", color: "var(--rose)", display: "flex", alignItems: "center", gap: "6px" }}>
+                                  ⚠️ Critical Risk Flags Detected in Company Ledger
+                                </h4>
+                                <div style={{ display: "grid", gap: "8px" }}>
+                                  {alerts.map(a => (
+                                    <div key={a.id} style={{ fontSize: "12px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line)", paddingBottom: "6px" }}>
+                                      <span><strong>{a.type.toUpperCase()}:</strong> {a.description}</span>
+                                      <span className={`status ${a.severity === "high" ? "bad" : "warn"}`} style={{ fontSize: "10px", padding: "1px 6px" }}>
+                                        {a.severity.toUpperCase()}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -4263,6 +4512,389 @@ def handle_low_stock(event):
         )}
       </>
     )}
+
+        {/* ====================================================================
+            PERIOD-END ADJUSTMENTS MODULE
+            ==================================================================== */}
+        {activeSection === "adjustments" && activeCompany && (() => {
+          const depAmount = calcDepreciation();
+          const impLoss   = (parseFloat(impBookValue) || 0) - (parseFloat(impRecoverable) || 0);
+          const amoAmount = calcAmortization();
+          const { expense: preExpense, remaining: preRemaining, monthly: preMonthly } = calcPrepayment();
+
+          const ASSET_ACCOUNTS: Record<string, string> = {
+            "1510": "Machinery & Equipment",
+            "1520": "Furniture & Fixtures",
+            "1530": "Vehicles",
+            "1540": "Computers & IT Equipment",
+            "1710": "Intangible Assets / Patent / Goodwill",
+            "1720": "Software Licenses",
+          };
+          const ACCRUAL_ACCOUNTS: Record<string, string> = {
+            "2110": "Salary Payable",
+            "2120": "Interest Payable",
+            "2130": "Rent Payable",
+            "2140": "Utilities Payable",
+            "1210": "Accrued Revenue Receivable",
+          };
+
+          const tabStyle = (t: string) => ({
+            padding: "8px 16px",
+            border: "none",
+            borderRadius: "8px 8px 0 0",
+            cursor: "pointer",
+            fontSize: "12px",
+            fontWeight: adjTab === t ? 700 : 500,
+            background: adjTab === t ? "var(--surface-2)" : "transparent",
+            color: adjTab === t ? "var(--teal)" : "var(--muted)",
+            borderBottom: adjTab === t ? "2px solid var(--teal)" : "2px solid transparent",
+            transition: "all 0.2s"
+          } as React.CSSProperties);
+
+          const JELine = ({ side, account, amount }: { side: "Dr" | "Cr"; account: string; amount: number }) => (
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", background: side === "Dr" ? "rgba(56,189,248,0.06)" : "rgba(168,85,247,0.06)", borderRadius: "6px", fontSize: "12px", fontFamily: "monospace" }}>
+              <span style={{ color: side === "Dr" ? "var(--teal)" : "#a855f7" }}>
+                <strong>{side}</strong>&nbsp;&nbsp;{account}
+              </span>
+              <span style={{ fontWeight: 700 }}>₹ {amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            </div>
+          );
+
+          return (
+            <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "20px" }}>
+
+              {/* Status messages */}
+              {adjSuccess && <div style={{ background: "rgba(34,197,94,0.1)", border: "1px solid #22c55e", borderRadius: "8px", padding: "12px 16px", color: "#22c55e", fontSize: "13px" }}>✅ {adjSuccess}</div>}
+              {adjError   && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", borderRadius: "8px", padding: "12px 16px", color: "#ef4444", fontSize: "13px" }}>❌ {adjError}</div>}
+
+              {/* Tab bar */}
+              <div style={{ borderBottom: "1px solid var(--line)", display: "flex", gap: "4px" }}>
+                <button style={tabStyle("depreciation")} onClick={() => setAdjTab("depreciation")}><span>📉 Depreciation</span></button>
+                <button style={tabStyle("impairment")}   onClick={() => setAdjTab("impairment")}><span>🔻 Impairment</span></button>
+                <button style={tabStyle("amortization")} onClick={() => setAdjTab("amortization")}><span>📄 Amortization</span></button>
+                <button style={tabStyle("accrual")}      onClick={() => setAdjTab("accrual")}><span>⏱️ Accruals</span></button>
+                <button style={tabStyle("prepayment")}   onClick={() => setAdjTab("prepayment")}><span>💳 Prepayments</span></button>
+              </div>
+
+              {/* ── DEPRECIATION TAB ── */}
+              {adjTab === "depreciation" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "20px" }}>
+                  <div className="panel">
+                    <div className="panel-header"><div className="panel-title"><Calculator size={20} style={{ color: "var(--teal)" }} /><div><h3>Depreciation Wizard</h3><p>Straight Line Method (SLM) or Written Down Value (WDV) — auto-calculate and post the entry.</p></div></div></div>
+                    <div className="panel-body">
+                      <div className="form-grid">
+                        <div className="two-col">
+                          <div className="field"><label>Asset Name *</label><input type="text" placeholder="e.g. Delivery Van, HP Laptop" value={depAssetName} onChange={e => setDepAssetName(e.target.value)} /></div>
+                          <div className="field"><label>Asset Account *</label>
+                            <select value={depAccount} onChange={e => setDepAccount(e.target.value)}>
+                              {Object.entries(ASSET_ACCOUNTS).map(([code, name]) => <option key={code} value={code}>{code} — {name}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="two-col">
+                          <div className="field"><label>Depreciation Method *</label>
+                            <select value={depMethod} onChange={e => setDepMethod(e.target.value as "slm" | "wdv")}>
+                              <option value="slm">Straight Line Method (SLM)</option>
+                              <option value="wdv">Written Down Value (WDV)</option>
+                            </select>
+                          </div>
+                          <div className="field"><label>Period</label>
+                            <select value={depPeriod} onChange={e => setDepPeriod(e.target.value as "annual" | "monthly")}>
+                              <option value="annual">Annual</option>
+                              <option value="monthly">Monthly (1/12th)</option>
+                            </select>
+                          </div>
+                        </div>
+                        {depMethod === "slm" ? (
+                          <div className="two-col">
+                            <div className="field"><label>Original Cost (₹) *</label><input type="number" step="0.01" placeholder="500000" value={depCost} onChange={e => setDepCost(e.target.value)} /></div>
+                            <div className="field"><label>Residual / Scrap Value (₹)</label><input type="number" step="0.01" placeholder="0" value={depResidual} onChange={e => setDepResidual(e.target.value)} /></div>
+                          </div>
+                        ) : (
+                          <div className="two-col">
+                            <div className="field"><label>Current Book Value (₹) *</label><input type="number" step="0.01" placeholder="420000" value={depBookValue} onChange={e => setDepBookValue(e.target.value)} /></div>
+                            <div className="field"><label>WDV Rate (%)</label><input type="number" step="0.01" placeholder="20" value={depWdvRate} onChange={e => setDepWdvRate(e.target.value)} /></div>
+                          </div>
+                        )}
+                        {depMethod === "slm" && (
+                          <div className="two-col">
+                            <div className="field"><label>Useful Life (years) *</label><input type="number" placeholder="5" value={depLife} onChange={e => setDepLife(e.target.value)} /></div>
+                            <div className="field"><label>Entry Date</label><input type="date" value={depDate} onChange={e => setDepDate(e.target.value)} /></div>
+                          </div>
+                        )}
+                        {depMethod === "wdv" && (
+                          <div className="field"><label>Entry Date</label><input type="date" value={depDate} onChange={e => setDepDate(e.target.value)} /></div>
+                        )}
+                        <button
+                          className="btn-primary"
+                          disabled={adjPosting || !depAssetName || depAmount <= 0}
+                          onClick={() => postAdjustmentEntry(`Depreciation on ${depAssetName} (${depMethod.toUpperCase()}, ${depPeriod})`, depAmount, depDate)}
+                        >
+                          {adjPosting ? "Posting…" : "📒 Post Depreciation Entry"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Live Preview */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div className="panel" style={{ flex: 1 }}>
+                      <div className="panel-header"><div className="panel-title"><Layers size={18} style={{ color: "var(--teal)" }} /><div><h3>Live Preview</h3><p>Journal entry that will be posted</p></div></div></div>
+                      <div className="panel-body" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <div style={{ fontSize: "13px", color: "var(--muted)" }}>
+                          {depMethod === "slm"
+                            ? <>SLM: (₹{(parseFloat(depCost)||0).toLocaleString("en-IN")} − ₹{(parseFloat(depResidual)||0).toLocaleString("en-IN")}) ÷ {depLife} yrs {depPeriod === "monthly" ? "÷ 12" : ""}</>
+                            : <>WDV: ₹{(parseFloat(depBookValue)||0).toLocaleString("en-IN")} × {depWdvRate}% {depPeriod === "monthly" ? "÷ 12" : ""}</>
+                          }
+                        </div>
+                        <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--teal)" }}>₹ {depAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <JELine side="Dr" account="Depreciation Expense A/c" amount={depAmount} />
+                          <JELine side="Cr" account={`Accumulated Depreciation (${ASSET_ACCOUNTS[depAccount] || depAccount})`} amount={depAmount} />
+                        </div>
+                        <div style={{ fontSize: "11px", color: "var(--muted)", borderTop: "1px solid var(--line)", paddingTop: "8px" }}>
+                          Effect: Reduces net asset value on Balance Sheet. Increases expense on P&L.
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ background: "rgba(56,189,248,0.05)", border: "1px solid rgba(56,189,248,0.2)", borderRadius: "10px", padding: "14px", fontSize: "12px", color: "var(--muted)", lineHeight: "1.6" }}>
+                      <strong style={{ color: "var(--fg)" }}>📘 SLM vs WDV</strong><br />
+                      <strong>SLM:</strong> Equal charge every year. Preferred for assets with uniform usage.<br />
+                      <strong>WDV:</strong> Higher charge in early years, tapers off. Preferred under Companies Act 2013 Schedule II.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── IMPAIRMENT TAB ── */}
+              {adjTab === "impairment" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "20px" }}>
+                  <div className="panel">
+                    <div className="panel-header"><div className="panel-title"><AlertTriangle size={20} style={{ color: "#f59e0b" }} /><div><h3>Impairment Loss Entry</h3><p>Write down an asset when its recoverable amount falls below book value.</p></div></div></div>
+                    <div className="panel-body">
+                      <div className="form-grid">
+                        <div className="two-col">
+                          <div className="field"><label>Asset Name *</label><input type="text" placeholder="e.g. Manufacturing Plant, Goodwill" value={impAssetName} onChange={e => setImpAssetName(e.target.value)} /></div>
+                          <div className="field"><label>Asset Account *</label>
+                            <select value={impAccount} onChange={e => setImpAccount(e.target.value)}>
+                              {Object.entries(ASSET_ACCOUNTS).map(([code, name]) => <option key={code} value={code}>{code} — {name}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="two-col">
+                          <div className="field"><label>Current Book Value (₹) *</label><input type="number" step="0.01" placeholder="300000" value={impBookValue} onChange={e => setImpBookValue(e.target.value)} /></div>
+                          <div className="field"><label>Recoverable Amount (₹) *</label><input type="number" step="0.01" placeholder="180000" value={impRecoverable} onChange={e => setImpRecoverable(e.target.value)} /></div>
+                        </div>
+                        <div className="field"><label>Impairment Date</label><input type="date" value={impDate} onChange={e => setImpDate(e.target.value)} /></div>
+                        <button
+                          className="btn-primary"
+                          disabled={adjPosting || !impAssetName || impLoss <= 0}
+                          onClick={() => postAdjustmentEntry(`Impairment Loss — ${impAssetName}`, impLoss, impDate)}
+                        >
+                          {adjPosting ? "Posting…" : "📒 Post Impairment Entry"}
+                        </button>
+                        {impLoss < 0 && <div style={{ color: "#f59e0b", fontSize: "12px" }}>⚠️ Recoverable amount exceeds book value — no impairment needed.</div>}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div className="panel" style={{ flex: 1 }}>
+                      <div className="panel-header"><div className="panel-title"><Layers size={18} style={{ color: "var(--teal)" }} /><div><h3>Live Preview</h3></div></div></div>
+                      <div className="panel-body" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <div style={{ fontSize: "13px", color: "var(--muted)" }}>Book Value − Recoverable Amount</div>
+                        <div style={{ fontSize: "24px", fontWeight: 800, color: impLoss > 0 ? "#ef4444" : "var(--muted)" }}>₹ {Math.max(0, impLoss).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+                        {impLoss > 0 && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <JELine side="Dr" account="Impairment Loss (Expense)" amount={impLoss} />
+                            <JELine side="Cr" account={ASSET_ACCOUNTS[impAccount] || impAccount} amount={impLoss} />
+                          </div>
+                        )}
+                        <div style={{ fontSize: "11px", color: "var(--muted)", borderTop: "1px solid var(--line)", paddingTop: "8px" }}>
+                          As per Ind AS 36. Reduces asset carrying amount. Recognized as expense in P&L immediately.
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "10px", padding: "14px", fontSize: "12px", color: "var(--muted)", lineHeight: "1.6" }}>
+                      <strong style={{ color: "var(--fg)" }}>📘 When to record impairment?</strong><br />
+                      When there are signs of significant decline in market value, physical damage, or obsolescence of an asset. Must be tested annually for goodwill and intangibles (Ind AS 36).
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── AMORTIZATION TAB ── */}
+              {adjTab === "amortization" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "20px" }}>
+                  <div className="panel">
+                    <div className="panel-header"><div className="panel-title"><Layers size={20} style={{ color: "var(--teal)" }} /><div><h3>Amortization Entry</h3><p>Spread the cost of intangible assets (patents, software, goodwill) over their useful life.</p></div></div></div>
+                    <div className="panel-body">
+                      <div className="form-grid">
+                        <div className="two-col">
+                          <div className="field"><label>Intangible Asset Name *</label><input type="text" placeholder="e.g. Customer Acquisition Patent" value={amoAssetName} onChange={e => setAmoAssetName(e.target.value)} /></div>
+                          <div className="field"><label>Asset Account *</label>
+                            <select value={amoAccount} onChange={e => setAmoAccount(e.target.value)}>
+                              <option value="1710">1710 — Intangible Assets / Goodwill</option>
+                              <option value="1720">1720 — Software Licenses</option>
+                              <option value="1730">1730 — Patents & Trademarks</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="two-col">
+                          <div className="field"><label>Total Cost (₹) *</label><input type="number" step="0.01" placeholder="360000" value={amoCost} onChange={e => setAmoCost(e.target.value)} /></div>
+                          <div className="field"><label>Total Life (months) *</label><input type="number" placeholder="36" value={amoPeriodMonths} onChange={e => setAmoPeriodMonths(e.target.value)} /></div>
+                        </div>
+                        <div className="two-col">
+                          <div className="field"><label>Amortize For</label>
+                            <select value={amoPeriod} onChange={e => setAmoPeriod(e.target.value as "monthly" | "annual")}>
+                              <option value="monthly">1 Month</option>
+                              <option value="annual">12 Months (full year)</option>
+                            </select>
+                          </div>
+                          <div className="field"><label>Entry Date</label><input type="date" value={amoDate} onChange={e => setAmoDate(e.target.value)} /></div>
+                        </div>
+                        <button
+                          className="btn-primary"
+                          disabled={adjPosting || !amoAssetName || amoAmount <= 0}
+                          onClick={() => postAdjustmentEntry(`Amortization — ${amoAssetName} (${amoPeriod})`, amoAmount, amoDate)}
+                        >
+                          {adjPosting ? "Posting…" : "📒 Post Amortization Entry"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="panel">
+                    <div className="panel-header"><div className="panel-title"><Layers size={18} style={{ color: "var(--teal)" }} /><div><h3>Live Preview</h3></div></div></div>
+                    <div className="panel-body" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div style={{ fontSize: "13px", color: "var(--muted)" }}>₹{parseFloat(amoCost)||0} ÷ {amoPeriodMonths} months {amoPeriod === "annual" ? "× 12" : ""}</div>
+                      <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--teal)" }}>₹ {amoAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <JELine side="Dr" account="Amortization Expense A/c" amount={amoAmount} />
+                        <JELine side="Cr" account={`${amoAccount} — Intangible Asset (reduce)`} amount={amoAmount} />
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--muted)", borderTop: "1px solid var(--line)", paddingTop: "8px" }}>
+                        Reduces intangible asset on Balance Sheet. Charged to P&L as expense.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── ACCRUALS TAB ── */}
+              {adjTab === "accrual" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "20px" }}>
+                  <div className="panel">
+                    <div className="panel-header"><div className="panel-title"><Clock size={20} style={{ color: "var(--teal)" }} /><div><h3>Accrual Entry</h3><p>Recognize income or expense that has been earned/incurred but cash has not yet moved.</p></div></div></div>
+                    <div className="panel-body">
+                      <div className="form-grid">
+                        <div className="field"><label>Accrual Type *</label>
+                          <select value={acrType} onChange={e => setAcrType(e.target.value as "expense" | "revenue")}>
+                            <option value="expense">Expense Accrual (e.g. salary payable, interest payable)</option>
+                            <option value="revenue">Revenue Accrual (e.g. service rendered, not yet invoiced)</option>
+                          </select>
+                        </div>
+                        <div className="field"><label>Description / Narration *</label><input type="text" placeholder={acrType === "expense" ? "e.g. March 2026 Salary Payable" : "e.g. Consulting fee earned, invoice pending"} value={acrDesc} onChange={e => setAcrDesc(e.target.value)} /></div>
+                        <div className="two-col">
+                          <div className="field"><label>{acrType === "expense" ? "Payable Account" : "Receivable Account"}</label>
+                            <select value={acrAccount} onChange={e => setAcrAccount(e.target.value)}>
+                              {Object.entries(ACCRUAL_ACCOUNTS).map(([code, name]) => <option key={code} value={code}>{code} — {name}</option>)}
+                            </select>
+                          </div>
+                          <div className="field"><label>Amount (₹) *</label><input type="number" step="0.01" placeholder="80000" value={acrAmount} onChange={e => setAcrAmount(e.target.value)} /></div>
+                        </div>
+                        <div className="field"><label>Accrual Date</label><input type="date" value={acrDate} onChange={e => setAcrDate(e.target.value)} /></div>
+                        <button
+                          className="btn-primary"
+                          disabled={adjPosting || !acrDesc || !acrAmount}
+                          onClick={() => postAdjustmentEntry(`Accrual (${acrType}) — ${acrDesc}`, parseFloat(acrAmount)||0, acrDate)}
+                        >
+                          {adjPosting ? "Posting…" : "📒 Post Accrual Entry"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div className="panel" style={{ flex: 1 }}>
+                      <div className="panel-header"><div className="panel-title"><Layers size={18} style={{ color: "var(--teal)" }} /><div><h3>Live Preview</h3></div></div></div>
+                      <div className="panel-body" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--teal)" }}>₹ {(parseFloat(acrAmount)||0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+                        {acrType === "expense" ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <JELine side="Dr" account={`${acrDesc || "Expense Account"} (P&L)`} amount={parseFloat(acrAmount)||0} />
+                            <JELine side="Cr" account={`${ACCRUAL_ACCOUNTS[acrAccount] || acrAccount} (BS Liability)`} amount={parseFloat(acrAmount)||0} />
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <JELine side="Dr" account={`${ACCRUAL_ACCOUNTS[acrAccount] || acrAccount} (BS Asset)`} amount={parseFloat(acrAmount)||0} />
+                            <JELine side="Cr" account={`${acrDesc || "Revenue Account"} (P&L Income)`} amount={parseFloat(acrAmount)||0} />
+                          </div>
+                        )}
+                        <div style={{ fontSize: "11px", color: "var(--muted)", borderTop: "1px solid var(--line)", paddingTop: "8px" }}>
+                          {acrType === "expense" ? "Creates a liability on the Balance Sheet. Charges P&L in current period." : "Creates a receivable asset. Recognizes revenue in current period."}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ background: "rgba(56,189,248,0.05)", border: "1px solid rgba(56,189,248,0.2)", borderRadius: "10px", padding: "14px", fontSize: "12px", color: "var(--muted)", lineHeight: "1.6" }}>
+                      <strong style={{ color: "var(--fg)" }}>📘 Matching Principle</strong><br />
+                      Accruals ensure revenue and expenses are matched in the same period regardless of when cash moves. Required under Ind AS / GAAP.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── PREPAYMENT TAB ── */}
+              {adjTab === "prepayment" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "20px" }}>
+                  <div className="panel">
+                    <div className="panel-header"><div className="panel-title"><Wallet size={20} style={{ color: "var(--teal)" }} /><div><h3>Prepayment / Deferred Expense</h3><p>Expense paid in advance — recognize only the portion consumed in the current period.</p></div></div></div>
+                    <div className="panel-body">
+                      <div className="form-grid">
+                        <div className="field"><label>Description *</label><input type="text" placeholder="e.g. Annual Fire Insurance Premium, 12-month SaaS Subscription" value={preDesc} onChange={e => setPreDesc(e.target.value)} /></div>
+                        <div className="two-col">
+                          <div className="field"><label>Total Amount Paid (₹) *</label><input type="number" step="0.01" placeholder="120000" value={preTotalPaid} onChange={e => setPreTotalPaid(e.target.value)} /></div>
+                          <div className="field"><label>Total Period Covered (months) *</label><input type="number" placeholder="12" value={preMonthsCovered} onChange={e => setPreMonthsCovered(e.target.value)} /></div>
+                        </div>
+                        <div className="two-col">
+                          <div className="field"><label>Months to Expense Now *</label><input type="number" placeholder="1" value={preMonthsConsumed} onChange={e => setPreMonthsConsumed(e.target.value)} /></div>
+                          <div className="field"><label>Entry Date</label><input type="date" value={preDate} onChange={e => setPreDate(e.target.value)} /></div>
+                        </div>
+                        <button
+                          className="btn-primary"
+                          disabled={adjPosting || !preDesc || preExpense <= 0}
+                          onClick={() => postAdjustmentEntry(`Prepayment Expense Recognition — ${preDesc}`, preExpense, preDate)}
+                        >
+                          {adjPosting ? "Posting…" : "📒 Post Prepayment Entry"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div className="panel" style={{ flex: 1 }}>
+                      <div className="panel-header"><div className="panel-title"><Layers size={18} style={{ color: "var(--teal)" }} /><div><h3>Live Preview</h3></div></div></div>
+                      <div className="panel-body" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <div style={{ fontSize: "12px", color: "var(--muted)" }}>Monthly allocation: ₹ {preMonthly.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+                        <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--teal)" }}>₹ {preExpense.toLocaleString("en-IN", { minimumFractionDigits: 2 })}<span style={{ fontSize: "13px", color: "var(--muted)", fontWeight: 400 }}> (to expense)</span></div>
+                        <div style={{ fontSize: "13px", color: "var(--muted)" }}>Remaining Prepaid: ₹ {preRemaining.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <JELine side="Dr" account={`${preDesc || "Expense A/c"} (P&L)`} amount={preExpense} />
+                          <JELine side="Cr" account="Prepaid Asset Account (Balance Sheet reduces)" amount={preExpense} />
+                        </div>
+                        <div style={{ fontSize: "11px", color: "var(--muted)", borderTop: "1px solid var(--line)", paddingTop: "8px" }}>
+                          Prepaid balance on BS reduces by ₹{preExpense.toLocaleString("en-IN", { minimumFractionDigits: 2 })} each period.
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ background: "rgba(56,189,248,0.05)", border: "1px solid rgba(56,189,248,0.2)", borderRadius: "10px", padding: "14px", fontSize: "12px", color: "var(--muted)", lineHeight: "1.6" }}>
+                      <strong style={{ color: "var(--fg)" }}>📘 Example</strong><br />
+                      ₹1,20,000 annual insurance paid on April 1.<br />
+                      Each month: Dr Insurance Expense ₹10,000 / Cr Prepaid Insurance ₹10,000.<br />
+                      After 12 months, prepaid balance = ₹0.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          );
+        })()}
   </main>
 </div>
 );
