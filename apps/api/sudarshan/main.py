@@ -183,6 +183,7 @@ def journal_to_schema(journal: JournalEntry) -> JournalEntryRead:
         entry_date=journal.entry_date,
         narration=journal.narration,
         status=journal.status,
+        branch_id=journal.branch_id,
         created_at=journal.created_at,
         lines=[line_to_schema(line) for line in journal.lines],
     )
