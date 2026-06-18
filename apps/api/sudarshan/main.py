@@ -281,6 +281,7 @@ def create_manual_transaction(company_id: str, payload: ManualTransactionCreate,
     classification = classify_manual_transaction(payload)
     try:
         draft, journal = post_classified_transaction(db, company_id, payload, classification)
+        db.commit()
     except ValueError as exc:
         if "Potential duplicate" in str(exc):
             draft = (
@@ -452,6 +453,7 @@ def upload_transactions(
             payload = ManualTransactionCreate(**row)
             classification = classify_manual_transaction(payload)
             draft, journal = post_classified_transaction(db, company_id, payload, classification)
+            db.commit()
             posted_count += 1
             results.append({
                 "description": row["description"],
