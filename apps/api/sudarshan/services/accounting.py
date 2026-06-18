@@ -192,7 +192,12 @@ def create_exception_draft(
 
 
 def duplicate_posted_draft_exists(db: Session, company_id: str, payload) -> bool:
-    return (
+    from datetime import datetime, timedelta, timezone
+    
+    # Enforce a 10-second window to prevent rapid double-clicks / identical double-submissions
+    ten_seconds_ago = datetime.now(timezone.utc) - timedelta(seconds=10)
+    
+    q = (
         db.query(TransactionDraft)
         .filter(
             TransactionDraft.company_id == company_id,
@@ -200,10 +205,16 @@ def duplicate_posted_draft_exists(db: Session, company_id: str, payload) -> bool
             TransactionDraft.amount == money(payload.amount),
             TransactionDraft.description == payload.description,
             TransactionDraft.status == DraftStatus.POSTED,
+            TransactionDraft.created_at >= ten_seconds_ago,
         )
-        .first()
-        is not None
     )
+    
+    counterparty = getattr(payload, "counterparty", None)
+    if counterparty:
+        q = q.filter(TransactionDraft.counterparty == counterparty)
+        
+    return q.first() is not None
+
 
 
 def post_classified_transaction(
